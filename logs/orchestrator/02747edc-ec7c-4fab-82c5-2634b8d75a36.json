@@ -1,0 +1,14 @@
+{
+  "id": "02747edc-ec7c-4fab-82c5-2634b8d75a36",
+  "name": "single-delegation",
+  "createdAt": "2026-02-25T10:30:38.522Z",
+  "status": "failed",
+  "tasks": [
+    null
+  ],
+  "results": [],
+  "timing": {},
+  "metadata": {
+    "error": "Unknown agent type: undefined. Available: code-specialist, security-analyst, research-analyst, creative-writer, synthesizer, summarizer"
+  }
+}

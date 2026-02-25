@@ -1,0 +1,30 @@
+{
+  "name": "comprehensive-code-review",
+  "description": "A comprehensive code review using multiple specialized agents",
+  "version": "1.0.0",
+  
+  "tasks": [
+    {
+      "agentType": "security-analyst",
+      "task": "Review code for security vulnerabilities",
+      "context": { "focus": "vulnerabilities", "severity": "critical-high-medium" }
+    },
+    {
+      "agentType": "code-specialist", 
+      "task": "Review code quality and performance",
+      "context": { "focus": "performance", "check": "best-practices" }
+    },
+    {
+      "agentType": "summarizer",
+      "task": "Check documentation completeness",
+      "context": { "focus": "documentation" }
+    }
+  ],
+  
+  "aggregateMode": "synthesize",
+  
+  "output": {
+    "format": "markdown",
+    "sections": ["summary", "findings", "recommendations", "metrics"]
+  }
+}
