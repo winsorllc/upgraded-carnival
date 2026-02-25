@@ -81,4 +81,5 @@ jobs:
             -e LLM_MODEL="${LLM_MODEL}" \
             -e LLM_PROVIDER="${LLM_PROVIDER}" \
             -e OPENAI_BASE_URL="${OPENAI_BASE_URL}" \
+            -e GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
             "$IMAGE"
