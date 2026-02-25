@@ -2,6 +2,7 @@ name: Run thepopebot Job
 
 on:
   create:
+  workflow_dispatch:
 
 jobs:
   run-agent:
