@@ -1,0 +1,19 @@
+{
+  "name": "composio-skill",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Composio integration for PopeBot — access 1000+ apps via unified API",
+  "main": "execute.js",
+  "scripts": {
+    "test": "node test.test.js"
+  },
+  "dependencies": {
+    "@composio/core": "^0.2.4",
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "nodemailer": "^8.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
