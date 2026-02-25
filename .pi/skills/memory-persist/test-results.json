@@ -1,0 +1,34 @@
+{
+  "passed": 7,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "Store memory",
+      "status": "passed"
+    },
+    {
+      "name": "Recall memory",
+      "status": "passed"
+    },
+    {
+      "name": "Search by value",
+      "status": "passed"
+    },
+    {
+      "name": "List memories",
+      "status": "passed"
+    },
+    {
+      "name": "Delete memory",
+      "status": "passed"
+    },
+    {
+      "name": "Clear all memories",
+      "status": "passed"
+    },
+    {
+      "name": "Persistence verification",
+      "status": "passed"
+    }
+  ]
+}
