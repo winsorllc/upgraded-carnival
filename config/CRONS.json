@@ -57,7 +57,7 @@
   },
   {
     "name": "repo-scan-glm5",
-    "schedule": "0 8 * * *",
+    "schedule": "0 1 * * *",
     "type": "agent",
     "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
     "llm_provider": "custom",
@@ -66,7 +66,7 @@
   },
   {
     "name": "repo-scan-minimax",
-    "schedule": "5 8 * * *",
+    "schedule": "5 1 * * *",
     "type": "agent",
     "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
     "llm_provider": "custom",
@@ -75,7 +75,7 @@
   },
   {
     "name": "repo-scan-kimi",
-    "schedule": "10 8 * * *",
+    "schedule": "10 1 * * *",
     "type": "agent",
     "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
     "llm_provider": "custom",
@@ -84,7 +84,7 @@
   },
   {
     "name": "repo-scan-qwen",
-    "schedule": "15 8 * * *",
+    "schedule": "15 1 * * *",
     "type": "agent",
     "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
     "llm_provider": "custom",
