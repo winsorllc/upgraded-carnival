@@ -1,0 +1,12 @@
+{
+  "name": "file-intel",
+  "version": "1.0.0",
+  "description": "File Intelligence - Analyze file relationships, dependencies, and patterns",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": ["file", "analysis", "dependencies", "patterns"],
+  "author": "",
+  "license": "MIT"
+}
