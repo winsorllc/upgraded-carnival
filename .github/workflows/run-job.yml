@@ -85,4 +85,6 @@ jobs:
             -e LLM_PROVIDER="${LLM_PROVIDER}" \
             -e OPENAI_BASE_URL="${OPENAI_BASE_URL}" \
             -e GITHUB_TOKEN="${{ secrets.GH_TOKEN }}" \
+            -e POPEBOT_EMAIL_USER="${{ secrets.AGENT_POPEBOT_EMAIL_USER }}" \
+            -e POPEBOT_EMAIL_PASS="${{ secrets.AGENT_POPEBOT_EMAIL_PASS }}" \
             "$IMAGE"
