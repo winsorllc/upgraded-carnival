@@ -1,0 +1,76 @@
+# Example: Email Triage Pipeline
+# This pipeline fetches recent emails, categorizes them, and requires approval before sending a summary
+
+name: "Daily Email Triage"
+version: "1.0"
+
+variables:
+  max_emails: 20
+  recipient: "user@example.com"
+
+stages:
+  - id: fetch_emails
+    type: analyze
+    config:
+      prompt: |
+        Simulate fetching {{max_emails}} recent emails.
+        Return as JSON array with: from, subject, date, preview.
+    output: emails
+
+  - id: triage
+    type: analyze
+    config:
+      prompt: |
+        Categorize these emails into buckets:
+        - needs_reply (urgent, requires response)
+        - needs_action (tasks, follow-ups)
+        - fyi (informational, newsletters)
+        
+        Input emails: {{emails}}
+        
+        Return JSON: { needs_reply: [], needs_action: [], fyi: [] }
+    output: categorized
+
+  - id: create_summary
+    type: analyze
+    config:
+      prompt: |
+        Create a summary email with:
+        - Count of emails in each category
+        - Top 3 urgent items from needs_reply
+        - Action items summary
+        
+        Input: {{categorized}}
+    output: summary
+
+  - id: approval_gate
+    type: approve
+    config:
+      prompt: "Send triage summary to {{recipient}}?"
+      show_data: "{{summary}}"
+    on_approve:
+      - id: send_summary
+        type: send_email
+        config:
+          to: "{{recipient}}"
+          subject: "Daily Email Triage Summary"
+          body: "{{summary}}"
+        output: send_result
+      
+      - id: save_archive
+        type: save
+        config:
+          path: "./triage-{{datetime}}.json"
+          data: "{{categorized}}"
+    
+    on_reject:
+      - id: save_draft
+        type: save
+        config:
+          path: "./draft-triage.json"
+          data: "{{summary}}"
+
+  - id: notify_complete
+    type: analyze
+    config:
+      prompt: "Generate completion message confirming the triage finished"
