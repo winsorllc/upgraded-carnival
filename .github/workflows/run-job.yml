@@ -1,7 +1,9 @@
 name: Run thepopebot Job
 
 on:
-  create:
+  push:
+    branches:
+      - 'job/**'
   workflow_dispatch:
 
 jobs:
