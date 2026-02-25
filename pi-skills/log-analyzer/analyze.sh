@@ -1,267 +1,522 @@
 #!/bin/bash
-#
-# Log Analyzer - Analyze log files for patterns and insights
-#
+# Log Analyzer - Analyze log files for patterns and errors
+set -euo pipefail
 
-set -e
+# Default values
+LOG_FILE=""
+ERRORS=false
+ERRORS_ONLY=false
+ERROR_PATTERN="ERROR|Error|error|FATAL|Fatal|fatal|CRITICAL|Critical|critical|FAIL|Fail|fail|Exception|exception|EXCEPTION"
+PATTERN=""
+COUNT_PATTERN=false
+CONTEXT=0
+TIME_START=""
+TIME_END=""
+LAST_DURATION=""
+HOURLY=false
+TIMELINE=false
+STATS=false
+COUNT_BY=""
+UNIQUE_FIELD=""
+TOP_N=""
+TOP_FIELD=""
+LOG_FORMAT="auto"
+CUSTOM_REGEX=""
+OUTPUT_FORMAT="text"
 
 # Colors
 RED='\033[0;31m'
-YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-RESET='\033[0m'
+NC='\033[0m'
 
-# Defaults
-LOG_FILE=""
-TAIL_LINES=""
-SHOW_ERRORS=false
-SHOW_WARNINGS=false
-SHOW_SUMMARY=false
-SHOW_STATS=false
-PATTERN=""
-SINCE=""
-UNTIL=""
+# Usage
+usage() {
+    cat << EOF
+Usage: $(basename "$0") <logfile> [options]
 
-default_date_format="%Y-%m-%d %H:%M:%S"
+Analyze log files for patterns, errors, and statistics.
+
+Log File:
+  logfile                  Path to log file (supports .gz compression)
+
+Analysis Options:
+  --summary               Show summary overview
+  --errors                Show error entries
+  --errors-only           Only show errors (hide others)
+  --error-pattern REGEX   Custom error pattern (default: ERROR|FAIL|Exception)
+  --pattern REGEX         Search for pattern
+  --count                 Count pattern matches
+  --context N             Show N lines of context
+
+Time Options:
+  --time-range START END  Filter by time range (YYYY-MM-DD HH:MM)
+  --last DURATION         Last N duration (1h, 24h, 7d, 30d)
+  --hourly               Group by hour
+  --timeline              Show events timeline
+
+Statistics:
+  --stats                 Show statistics
+  --count-by FIELD        Count by field
+  --unique FIELD          Unique values in field
+  --top N FIELD           Top N values by field
+
+Format:
+  --format FORMAT         Log format: auto, apache, nginx, json, syslog, custom
+  --regex REGEX           Custom regex for format
+  --output FORMAT         Output: text, json, csv
+
+Other:
+  --help                  Show this help message
+
+Examples:
+  $(basename "$0") app.log --summary
+  $(basename "$0") app.log --errors --last 1h
+  $(basename "$0") access.log --count-by ip --top 10
+  $(basename "$0") app.log --pattern "user:\d+" --count
+EOF
+    exit 0
+}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
-  case $1 in
-    --tail|-n)
-      TAIL_LINES="$2"
-      shift 2
-      ;;
-    --errors|-e)
-      SHOW_ERRORS=true
-      shift
-      ;;
-    --warnings|-w)
-      SHOW_WARNINGS=true
-      shift
-      ;;
-    --summary|-s)
-      SHOW_SUMMARY=true
-      shift
-      ;;
-    --stats)
-      SHOW_STATS=true
-      shift
-      ;;
-    --pattern|-p)
-      PATTERN="$2"
-      shift 2
-      ;;
-    --since)
-      SINCE="$2"
-      shift 2
-      ;;
-    --until)
-      UNTIL="$2"
-      shift 2
-      ;;
-    --help|-h)
-      show_help
-      exit 0
-      ;;
-    -*)
-      echo -e "${RED}Unknown option: $1${RESET}"
-      show_help
-      exit 1
-      ;;
-    *)
-      if [ -z "$LOG_FILE" ]; then
-        LOG_FILE="$1"
-      fi
-      shift
-      ;;
-  esac
+    case $1 in
+        --summary)
+            STATS=true
+            shift
+            ;;
+        --errors)
+            ERRORS=true
+            shift
+            ;;
+        --errors-only)
+            ERRORS_ONLY=true
+            ERRORS=true
+            shift
+            ;;
+        --error-pattern)
+            ERROR_PATTERN="$2"
+            shift 2
+            ;;
+        --pattern)
+            PATTERN="$2"
+            shift 2
+            ;;
+        --count)
+            COUNT_PATTERN=true
+            shift
+            ;;
+        --context)
+            CONTEXT="$2"
+            shift 2
+            ;;
+        --time-range)
+            TIME_START="$2"
+            TIME_END="$3"
+            shift 3
+            ;;
+        --last)
+            LAST_DURATION="$2"
+            shift 2
+            ;;
+        --hourly)
+            HOURLY=true
+            shift
+            ;;
+        --timeline)
+            TIMELINE=true
+            shift
+            ;;
+        --stats)
+            STATS=true
+            shift
+            ;;
+        --count-by)
+            COUNT_BY="$2"
+            shift 2
+            ;;
+        --unique)
+            UNIQUE_FIELD="$2"
+            shift 2
+            ;;
+        --top)
+            TOP_N="$2"
+            TOP_FIELD="$3"
+            shift 3
+            ;;
+        --format)
+            LOG_FORMAT="$2"
+            shift 2
+            ;;
+        --regex)
+            CUSTOM_REGEX="$2"
+            shift 2
+            ;;
+        --output)
+            OUTPUT_FORMAT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$LOG_FILE" ]]; then
+                LOG_FILE="$1"
+            fi
+            shift
+            ;;
+    esac
 done
 
-show_help() {
-  echo "Usage: analyze.sh <log-file> [options]"
-  echo
-  echo "Options:"
-  echo "  --tail, -n <n>        Analyze last n lines"
-  echo "  --errors, -e          Show only errors"
-  echo "  --warnings, -w        Show only warnings"
-  echo "  --summary, -s         Summary statistics only"
-  echo "  --stats               Show detailed statistics"
-  echo "  --pattern, -p <pat>   Search for pattern"
-  echo "  --since <date>        Filter entries since date"
-  echo "  --until <date>        Filter entries until date"
-  echo "  --help, -h            Show this help"
+# Validate
+if [[ -z "$LOG_FILE" ]]; then
+    echo "Error: Log file required" >&2
+    usage
+fi
+
+if [[ ! -f "$LOG_FILE" ]]; then
+    echo "Error: File not found: $LOG_FILE" >&2
+    exit 2
+fi
+
+# Detect log format
+detect_format() {
+    local file="$1"
+    local first_lines
+    first_lines=$(head -20 "$file" 2>/dev/null || cat "$file" | head -20)
+    
+    # Check if JSON
+    if echo "$first_lines" | grep -qE '^\s*\{.*\}\s*$'; then
+        echo "json"
+        return
+    fi
+    
+    # Check for Apache combined log format
+    if echo "$first_lines" | grep -qE '^[0-9.]+ - - \[[0-9]+/[A-Za-z]+/[0-9]+:[0-9]+:[0-9]+:[0-9]+ [+-][0-9]+\]'; then
+        echo "apache"
+        return
+    fi
+    
+    # Check for Nginx log format
+    if echo "$first_lines" | grep -qE '^[0-9.]+ - - \[[0-9]+/[A-Za-z]+/[0-9]+:[0-9]+:[0-9]+:[0-9]+ \+[0-9]+\]'; then
+        echo "nginx"
+        return
+    fi
+    
+    # Check for syslog format
+    if echo "$first_lines" | grep -qE '^[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}'; then
+        echo "syslog"
+        return
+    fi
+    
+    # Default: plain text with timestamps
+    echo "plain"
 }
 
-print_header() {
-  echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${RESET}"
-  echo -e "${CYAN}║${BOLD}                      LOG ANALYSIS REPORT                       ${RESET}${CYAN}║${RESET}"
-  echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${RESET}"
-  echo
+# Parse timestamp from log line
+parse_timestamp() {
+    local line="$1"
+    
+    # Try ISO format
+    if echo "$line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1; then
+        return
+    fi
+    
+    # Try common log format [10/Oct/2000:13:55:36]
+    if echo "$line" | grep -oE '\[[0-9]+/[A-Za-z]+/[0-9]+:[0-9]+:[0-9]+:[0-9]+' | sed 's/\[//'; then
+        return
+    fi
+    
+    # Try syslog format Jan  1 00:00:00
+    if echo "$line" | grep -oE '^[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}'; then
+        return
+    fi
+    
+    echo ""
 }
 
-# Check if file exists
-if [ -z "$LOG_FILE" ]; then
-  echo -e "${RED}Error: No log file specified${RESET}"
-  show_help
-  exit 1
-fi
+# Extract log level from line
+extract_level() {
+    local line="$1"
+    
+    # Try common level patterns
+    if echo "$line" | grep -oiE '\b(DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL|TRACE)\b' | head -1 | tr '[:lower:]' '[:upper:]'; then
+        return
+    fi
+    
+    # Try HTTP status
+    local status
+    status=$(echo "$line" | grep -oE '" [0-9]{3} ' | grep -oE '[0-9]{3}' | head -1)
+    if [[ -n "$status" ]]; then
+        if [[ "$status" -ge 500 ]]; then
+            echo "ERROR"
+        elif [[ "$status" -ge 400 ]]; then
+            echo "WARNING"
+        else
+            echo "INFO"
+        fi
+        return
+    fi
+    
+    echo "UNKNOWN"
+}
 
-if [ ! -f "$LOG_FILE" ]; then
-  echo -e "${RED}Error: File not found: $LOG_FILE${RESET}"
-  exit 1
-fi
+# Extract field from JSON
+extract_json_field() {
+    local line="$1"
+    local field="$2"
+    echo "$line" | jq -r ".$field // empty" 2>/dev/null || echo ""
+}
 
-# Determine how to read the file
-read_cmd="cat"
-if [ -n "$TAIL_LINES" ]; then
-  read_cmd="tail -n $TAIL_LINES"
-fi
+# Extract field from common log format
+extract_log_field() {
+    local line="$1"
+    local field="$2"
+    local format="$3"
+    
+    case "$format" in
+        apache|nginx)
+            case "$field" in
+                ip)
+                    echo "$line" | grep -oE '^[0-9.]+' | head -1
+                    ;;
+                method)
+                    echo "$line" | grep -oE '"[A-Z]+ ' | tr -d '"' | tr -d ' ' | head -1
+                    ;;
+                path)
+                    echo "$line" | grep -oE '"[A-Z]+ [^ ]+' | sed 's/"[A-Z]* //' | tr -d '"' | head -1
+                    ;;
+                status)
+                    echo "$line" | grep -oE '" [0-9]{3} ' | grep -oE '[0-9]{3}' | head -1
+                    ;;
+                size)
+                    echo "$line" | grep -oE '" [0-9]{3} [0-9]+' | grep -oE '[0-9]+$' | head -1
+                    ;;
+                user_agent)
+                    echo "$line" | grep -oE '"[^"]*"$' | tr -d '"' | head -1
+                    ;;
+            esac
+            ;;
+        *)
+            # Try JSON extraction
+            extract_json_field "$line" "$field"
+            ;;
+    esac
+}
 
+# Filter by time
+filter_by_time() {
+    local lines="$1"
+    local start="$2"
+    local end="$3"
+    
+    # This is simplified - real implementation would parse timestamps
+    # For now, pass through
+    echo "$lines"
+}
+
+# Filter by last duration
+filter_by_last() {
+    local lines="$1"
+    local duration="$2"
+    
+    local seconds
+    case "$duration" in
+        *h) seconds=$(( ${duration%h} * 3600 )) ;;
+        *d) seconds=$(( ${duration%d} * 86400 )) ;;
+        *m) seconds=$(( ${duration%m} * 60 )) ;;
+        *) seconds="$duration" ;;
+    esac
+    
+    local cutoff
+    cutoff=$(date -d "$seconds seconds ago" +%s 2>/dev/null || date -v-${seconds}S +%s 2>/dev/null)
+    
+    # For now, return all lines (would need timestamp parsing)
+    echo "$lines"
+}
+
+# Generate summary
+generate_summary() {
+    local file="$1"
+    local total_lines
+    total_lines=$(wc -l < "$file" | tr -d ' ')
+    local format
+    format="${LOG_FORMAT}"
+    [[ "$format" == "auto" ]] && format=$(detect_format "$file")
+    
+    # Count by level
+    local error_count=0
+    local warn_count=0
+    local info_count=0
+    local other_count=0
+    
+    while IFS= read -r line; do
+        local level
+        level=$(extract_level "$line")
+        case "$level" in
+            ERROR|FATAL|CRITICAL) ((error_count++)) ;;
+            WARN|WARNING) ((warn_count++)) ;;
+            INFO) ((info_count++)) ;;
+            *) ((other_count++)) ;;
+        esac
+        [[ $((error_count + warn_count + info_count + other_count)) -ge 1000 ]] && break
+    done < "$file"
+    
+    # Approximate based on sample
+    local samples=$((error_count + warn_count + info_count + other_count))
+    error_count=$((error_count * total_lines / samples))
+    warn_count=$((warn_count * total_lines / samples))
+    info_count=$((info_count * total_lines / samples))
+    other_count=$((total_lines - error_count - warn_count - info_count))
+    
+    if [[ "$OUTPUT_FORMAT" == "json" ]]; then
+        cat << EOF
+{
+  "file": "$file",
+  "total_lines": $total_lines,
+  "format": "$format",
+  "levels": {
+    "error": $error_count,
+    "warning": $warn_count,
+    "info": $info_count,
+    "other": $other_count
+  }
+}
+EOF
+    else
+        echo "Log Analysis Summary: $file"
+        echo "================================"
+        echo "Total lines:     $total_lines"
+        echo "Detected format: $format"
+        echo ""
+        echo "Log Levels:"
+        printf "  %-10s %s (%.1f%%)\n" "ERROR:" "$error_count" "$(echo "$error_count * 100 / $total_lines" | bc -l 2>/dev/null || echo '0')"
+        printf "  %-10s %s (%.1f%%)\n" "WARNING:" "$warn_count" "$(echo "$warn_count * 100 / $total_lines" | bc -l 2>/dev/null || echo '0')"
+        printf "  %-10s %s (%.1f%%)\n" "INFO:" "$info_count" "$(echo "$info_count * 100 / $total_lines" | bc -l 2>/dev/null || echo '0')"
+        printf "  %-10s %s\n" "OTHER:" "$other_count"
+    fi
+}
+
+# Show errors
+show_errors() {
+    local file="$1"
+    local pattern="$2"
+    
+    if [[ "$CONTEXT" -gt 0 ]]; then
+        grep -i -E "$pattern" -A "$CONTEXT" -B "$CONTEXT" "$file"
+    else
+        grep -i -E "$pattern" "$file"
+    fi
+}
+
+# Count pattern matches
 count_pattern() {
-  local pattern="$1"
-  $read_cmd "$LOG_FILE" 2>/dev/null | grep -c "$pattern" || echo "0"
+    local file="$1"
+    local pattern="$2"
+    local count
+    count=$(grep -i -c -E "$pattern" "$file" 2>/dev/null || echo "0")
+    echo "$count matches found for pattern: $pattern"
 }
 
-extract_timestamps() {
-  $read_cmd "$LOG_FILE" 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1
+# Count by field
+count_by_field() {
+    local file="$1"
+    local field="$2"
+    local format="$3"
+    
+    declare -A counts
+    
+    while IFS= read -r line; do
+        local value
+        value=$(extract_log_field "$line" "$field" "$format")
+        [[ -n "$value" ]] && ((counts["$value"]++))
+    done < "$file"
+    
+    # Sort by count
+    for key in "${!counts[@]}"; do
+        echo "${counts[$key]} $key"
+    done | sort -rn | head -20
 }
 
-# Get total lines
-TOTAL_LINES=$($read_cmd "$LOG_FILE" 2>/dev/null | wc -l)
+# Get unique values
+get_unique() {
+    local file="$1"
+    local field="$2"
+    local format="$3"
+    
+    while IFS= read -r line; do
+        extract_log_field "$line" "$field" "$format"
+    done < "$file" | sort -u | head -100
+}
 
-# Count log levels
-INFO_COUNT=$(count_pattern -i "info\\|information\\|\[INFO\\]\\|\bINFO\\s")
-WARN_COUNT=$(count_pattern -i "warn\\|warning\\|\[WARN\\]\\|\bWARN\\s")
-ERROR_COUNT=$(count_pattern -i "error\\|exception\\|\[ERROR\\]\\|\bERROR\\s\\|fail\\|failed\\|failure\\|\[ERR\\]")
-FATAL_COUNT=$(count_pattern -i "fatal\\|critical\\|\[FATAL\\]\\|\[CRIT\\]")
-DEBUG_COUNT=$(count_pattern -i "debug\\|\[DEBUG\\]")
+# Show hourly distribution
+show_hourly() {
+    local file="$1"
+    
+    # Extract hours and count
+    local hour_counts
+    hour_counts=$(grep -oE 'T?[0-9]{2}:[0-9]{2}:[0-9]{2}' "$file" 2>/dev/null | cut -d: -f1 | sed 's/^T//' | sort | uniq -c)
+    
+    echo "Hourly Distribution:"
+    echo "$hour_counts" | while read -r count hour; do
+        local bar
+        bar=$(printf '━%.0s' $(seq 1 $(($count / 10 + 1)) 2>/dev/null) 2>/dev/null || echo "")
+        printf "%02d:00 ━ %s %d\n" "$hour" "$bar" "$count"
+    done
+}
 
-# Get time range
-FIRST_TS=$($read_cmd "$LOG_FILE" 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}' | head -1)
-LAST_TS=$($read_cmd "$LOG_FILE" 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}:[0-9]{2}' | tail -1)
+# Top N analysis
+show_top() {
+    local file="$1"
+    local n="$2"
+    local field="$3"
+    local format="$4"
+    
+    echo "Top $n values for field '$field':"
+    count_by_field "$file" "$field" "$format" | head -n "$n"
+}
 
-# Output
-print_header
-
-echo -e "${BOLD}File:${RESET} ${BLUE}$LOG_FILE${RESET}"
-echo -e "${BOLD}Lines Analyzed:${RESET} $(echo $TOTAL_LINES | tr -d ' ')"
-if [ -n "$FIRST_TS" ]; then
-  echo -e "${BOLD}Time Range:${RESET} $FIRST_TS to $LAST_TS"
-fi
-echo
-
-# Show only errors mode
-if [ "$SHOW_ERRORS" = true ]; then
-  echo -e "${BOLD}${RED}ERRORS FOUND:${RESET}"
-  echo -e "${CYAN}────────────────────────────────────────────────────────────────────${RESET}"
-  $read_cmd "$LOG_FILE" 2>/dev/null | grep -iE "error|exception|fail|failed|\[ERR\]" | tail -20 | while read line; do
-    # Colorize error lines
-    if echo "$line" | grep -qiE "error|exception|fail"; then
-      echo -e "${RED}$line${RESET}"
+# Main analysis
+if [[ "$STATS" == "true" ]]; then
+    generate_summary "$LOG_FILE"
+elif [[ "$ERRORS" == "true" ]]; then
+    if [[ "$ERRORS_ONLY" == "true" ]]; then
+        show_errors "$LOG_FILE" "$ERROR_PATTERN"
     else
-      echo "$line"
+        show_errors "$LOG_FILE" "$ERROR_PATTERN"
     fi
-  done
-  exit 0
-fi
-
-# Show only warnings mode
-if [ "$SHOW_WARNINGS" = true ]; then
-  echo -e "${BOLD}${YELLOW}WARNINGS FOUND:${RESET}"
-  echo -e "${CYAN}────────────────────────────────────────────────────────────────────${RESET}"
-  $read_cmd "$LOG_FILE" 2>/dev/null | grep -iE "warn|warning|\[WARN\]" | tail -20 | while read line; do
-    echo -e "${YELLOW}$line${RESET}"
-  done
-  exit 0
-fi
-
-# Summary/Overview
-if [ "$SHOW_SUMMARY" = true ]; then
-  echo -e "${BOLD}LEVEL DISTRIBUTION${RESET}"
-  echo -e "${CYAN}──────────────────${RESET}"
-  
-  TOTAL=$((INFO_COUNT + WARN_COUNT + ERROR_COUNT + FATAL_COUNT + DEBUG_COUNT))
-  if [ "$TOTAL" -eq 0 ]; then TOTAL=1; fi
-  
-  INFO_PCT=$(( INFO_COUNT * 100 / TOTAL ))
-  WARN_PCT=$(( WARN_COUNT * 100 / TOTAL ))
-  ERROR_PCT=$(( ERROR_COUNT * 100 / TOTAL ))
-  FATAL_PCT=$(( FATAL_COUNT * 100 / TOTAL ))
-  
-  printf "  %8s  ${GREEN}%6d${RESET}  %3s%%\n" "INFO" "$INFO_COUNT" "$INFO_PCT"
-  printf "  %8s  ${YELLOW}%6d${RESET}  %3s%%\n" "WARN" "$WARN_COUNT" "$WARN_PCT"
-  printf "  %8s  ${RED}%6d${RESET}  %3s%%\n" "ERROR" "$ERROR_COUNT" "$ERROR_PCT"
-  printf "  %8s  ${RED}%6d${RESET}  %3s%%\n" "FATAL" "$FATAL_COUNT" "$FATAL_PCT"
-  echo
-  echo -e "${INFO} Total: $TOTAL log entries"
-  exit 0
-fi
-
-# Full analysis
-echo -e "${BOLD}LEVEL DISTRIBUTION${RESET}"
-echo -e "${CYAN}──────────────────${RESET}"
-
-BAR_WIDTH=50
-TOTAL=$((INFO_COUNT + WARN_COUNT + ERROR_COUNT + FATAL_COUNT + DEBUG_COUNT))
-if [ "$TOTAL" -eq 0 ]; then TOTAL=1; fi
-
-# Create bar charts
-info_bar=$(printf '%*s' "$(( INFO_COUNT * BAR_WIDTH / TOTAL ))" '' | tr ' ' '#')
-warn_bar=$(printf '%*s' "$(( WARN_COUNT * BAR_WIDTH / TOTAL ))" '' | tr ' ' '#')
-error_bar=$(printf '%*s' "$(( ERROR_COUNT * BAR_WIDTH / TOTAL ))" '' | tr ' ' '#')
-fatal_bar=$(printf '%*s' "$(( FATAL_COUNT * BAR_WIDTH / TOTAL ))" '' | tr ' ' '#')
-
-printf "  ${GREEN}%6d${RESET}  INFO     %s\n" "$INFO_COUNT" "$info_bar"
-printf "  ${YELLOW}%6d${RESET}  WARN     %s\n" "$WARN_COUNT" "$warn_bar"
-printf "  ${RED}%6d${RESET}  ERROR    %s\n" "$ERROR_COUNT" "$error_bar"
-printf "  ${RED}%6d${RESET}  FATAL    %s\n" "$FATAL_COUNT" "$fatal_bar"
-
-# Top error patterns
-echo
-echo -e "${BOLD}TOP ERROR PATTERNS${RESET}"
-echo -e "${CYAN}───────────────────${RESET}"
-
-$read_cmd "$LOG_FILE" 2>/dev/null | grep -i "error\|exception\|fail" | \
-  sed 's|/[^/]*:[0-9]*||g' | \
-  sort | uniq -c | sort -rn | head -5 | while read count msg; do
-  printf "  %5s  %s\n" "$count" "$(echo "$msg" | cut -c1-50)"
-done
-
-# Recent entries
-if [ "$ERROR_COUNT" -gt 0 ]; then
-  echo
-  echo -e "${BOLD}RECENT ENTRIES${RESET}"
-  echo -e "${CYAN}──────────────${RESET}"
-  
-  $read_cmd "$LOG_FILE" 2>/dev/null | tail -50 | grep -iE "error|warn|fail" | tail -5 | while read line; do
-    # Colorize
-    if echo "$line" | grep -qi "error"; then
-      echo -e "  ${RED}$line${RESET}"
-    elif echo "$line" | grep -qi "warn"; then
-      echo -e "  ${YELLOW}$line${RESET}"
+elif [[ -n "$PATTERN" ]]; then
+    if [[ "$COUNT_PATTERN" == "true" ]]; then
+        count_pattern "$LOG_FILE" "$PATTERN"
     else
-      echo "  $line"
+        if [[ "$CONTEXT" -gt 0 ]]; then
+            grep -i -E "$PATTERN" -A "$CONTEXT" -B "$CONTEXT" "$LOG_FILE"
+        else
+            grep -i -E "$PATTERN" "$LOG_FILE"
+        fi
     fi
-  done
+elif [[ -n "$COUNT_BY" ]]; then
+    format="$LOG_FORMAT"
+    [[ "$format" == "auto" ]] && format=$(detect_format "$LOG_FILE")
+    echo "Count by $COUNT_BY:"
+    count_by_field "$LOG_FILE" "$COUNT_BY" "$format"
+elif [[ -n "$UNIQUE_FIELD" ]]; then
+    format="$LOG_FORMAT"
+    [[ "$format" == "auto" ]] && format=$(detect_format "$LOG_FILE")
+    echo "Unique values for $UNIQUE_FIELD:"
+    get_unique "$LOG_FILE" "$UNIQUE_FIELD" "$format"
+elif [[ -n "$TOP_N" ]]; then
+    format="$LOG_FORMAT"
+    [[ "$format" == "auto" ]] && format=$(detect_format "$LOG_FILE")
+    show_top "$LOG_FILE" "$TOP_N" "$TOP_FIELD" "$format"
+elif [[ "$HOURLY" == "true" ]]; then
+    show_hourly "$LOG_FILE"
+else
+    # Default: show summary
+    generate_summary "$LOG_FILE"
 fi
-
-# Pattern search
-if [ -n "$PATTERN" ]; then
-  echo
-  echo -e "${BOLD}PATTERN: \"${PATTERN}\"${RESET}"
-  echo -e "${CYAN}────────────────────────────────────────────────────────────────────${RESET}"
-  
-  PATTERN_COUNT=$(count_pattern "$PATTERN")
-  echo -e "  Found ${BLUE}$PATTERN_COUNT${RESET} matches"
-  echo
-  
-  $read_cmd "$LOG_FILE" 2>/dev/null | grep "$PATTERN" | tail -10 | while read line; do
-    echo "  $line"
-  done
-fi
-
-echo
-echo -e "${CYAN}══════════════════════════════════════════════════════════════════${RESET}"

@@ -1,91 +1,104 @@
 ---
 name: video-frames
-description: Extract frames or short clips from videos using ffmpeg. Generate thumbnails and video previews.
-metadata: { "popebot": { "emoji": "🎞️", "requires": { "bins": ["ffmpeg"] } } }
+description: "Extract frames or create thumbnails from videos using ffmpeg. Use when you need to capture specific video frames, create preview thumbnails, or extract images from video files."
 ---
 
-# Video Frames (ffmpeg)
+# Video Frames Skill
 
-Extract frames, create thumbnails, and generate preview clips from videos.
+Extract frames or short clips from videos using ffmpeg.
+
+## When to Use
+
+✅ **USE this skill when:**
+
+- "Extract frame at 10 seconds from video"
+- "Create thumbnail from video"
+- "Get all frames from video at 1fps"
+- "Capture screenshot from video at timestamp"
+- "Make GIF from video"
+
+## When NOT to Use
+
+❌ **DON'T use this skill when:**
+
+- Converting video formats → use ffmpeg directly
+- Editing video → use video editing tools
+- Streaming video → use streaming tools
 
 ## Setup
 
-Install ffmpeg:
+Requires ffmpeg installed:
 
 ```bash
 # macOS
 brew install ffmpeg
 
 # Ubuntu/Debian
-apt-get update && apt-get install -y ffmpeg
+sudo apt install ffmpeg
 
-# Or use system package manager
+# Check installation
+ffmpeg -version
 ```
 
-## Usage
+## Commands
 
-### Extract First Frame
-
-Extract the first frame from a video:
+### Extract Single Frame
 
 ```bash
-ffmpeg -i input.mp4 -frames:v 1 -q:v 2 frame.jpg
+{baseDir}/frame.sh /path/to/video.mp4 --out /tmp/frame.jpg
 ```
 
 ### Extract Frame at Timestamp
 
-Extract a frame at a specific time:
-
 ```bash
-ffmpeg -i input.mp4 -ss 00:00:10 -frames:v 1 frame_at_10s.jpg
+{baseDir}/frame.sh /path/to/video.mp4 --time 00:00:10 --out /tmp/frame-10s.jpg
+{baseDir}/frame.sh /path/to/video.mp4 --time 5.5 --out /tmp/frame.jpg
 ```
 
-### Generate Thumbnail Grid
-
-Create a contact sheet with multiple frames:
+### Extract by Frame Index
 
 ```bash
-ffmpeg -i input.mp4 -vf "tile=3x3" thumbnail_grid.jpg
+{baseDir}/frame.sh /path/to/video.mp4 --index 100 --out /tmp/frame.jpg
 ```
 
-### Extract MultipleFrames
-
-Extract frames at regular intervals:
+### Create Thumbnails Grid
 
 ```bash
-ffmpeg -i input.mp4 -vf "fps=1/60" frame_%03d.jpg
+{baseDir}/thumbnails.sh /path/to/video.mp4 --count 12 --out /tmp/thumbnails.jpg
 ```
 
-Extract one frame every 60 seconds.
-
-### Create Short Clip
-
-Extract a 5-second clip starting at 10 seconds:
+### Extract Multiple Frames
 
 ```bash
-ffmpeg -i input.mp4 -ss 00:00:10 -t 00:00:05 -c copy clip.mp4
+{baseDir}/frames.sh /path/to/video.mp4 --fps 1 --out /tmp/frames/
 ```
 
-### Generate Animated GIF
-
-Create a GIF from a video segment:
+### Create GIF from Video
 
 ```bash
-ffmpeg -i input.mp4 -ss 00:00:10 -t 00:00:05 -vf "fps=10,scale=320:-1" output.gif
+{baseDir}/gif.sh /path/to/video.mp4 --start 00:00:10 --duration 5 --out /tmp/clip.gif
 ```
 
-### Get Video Info
+## Options
 
-Get metadata about a video file:
+- `--time`: Timestamp (HH:MM:SS or seconds)
+- `--index`: Frame number (0-based)
+- `--out`: Output path
+- `--fps`: Frames per second to extract
+- `--count`: Number of thumbnails
+- `--start`: Start time for GIF
+- `--duration`: Duration for GIF
+- `--width`: Output width (maintains aspect ratio)
 
-```bash
-ffprobe -v quiet -print_format json -show_format -show_streams input.mp4
-```
+## Output Formats
 
-## Tips
+- `.jpg`: Quick sharing, smaller file size
+- `.png`: Crisp UI frames, transparency support
+- `.gif`: Animated output for clips
 
-- Use `-q:v 2` for high-quality JPEGs (1-31, lower is better)
-- Use `-ss` before `-i` for faster seeking (but less accurate)
-- Use `-ss` after `-i` for frame-accurate seeking
-- Add `-c copy` to avoid re-encoding when cutting
-- Use `tile=WxH` for creating thumbnail grids
+## Notes
+
+- Supports MP4, MOV, AVI, MKV, WebM, and more
+- Use `--time` for "what is happening around here?"
+- Use `.png` for crisp UI frames
+- Use `.jpg` for quick sharing
