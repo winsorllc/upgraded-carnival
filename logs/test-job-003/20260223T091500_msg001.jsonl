@@ -1,0 +1,4 @@
+{"type": "session", "id": "test-job-003", "timestamp": "2026-02-23T09:15:00Z", "message": {"role": "system", "content": [{"type": "text", "text": "Task: update-documentation"}]}}
+{"type": "message", "id": "msg-001", "parentId": "test-job-003", "timestamp": "2026-02-23T09:15:01Z", "message": {"role": "user", "content": [{"type": "text", "text": "Update the API documentation"}]}}
+{"type": "message", "id": "msg-002", "parentId": "msg-001", "timestamp": "2026-02-23T09:15:30Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "Updating docs..."}], "usage": {"input_tokens": 500, "output_tokens": 250, "cost": {"total": 0.012}}}}
+{"type": "message", "id": "msg-003", "parentId": "msg-002", "timestamp": "2026-02-23T09:16:00Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "Documentation updated. Using model: claude-sonnet-4-20250514"}], "usage": {"input_tokens": 800, "output_tokens": 400, "cost": {"total": 0.018}}}}
