@@ -1,0 +1,13 @@
+{
+  "name": "nano-pdf",
+  "version": "1.0.0",
+  "description": "Edit PDFs with natural language instructions",
+  "main": "scripts/nano-pdf.js",
+  "type": "module",
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "keywords": ["pdf", "edit", "document"],
+  "author": "",
+  "license": "MIT"
+}
