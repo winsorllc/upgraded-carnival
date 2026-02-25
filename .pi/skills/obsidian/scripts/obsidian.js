@@ -1,542 +1,598 @@
 #!/usr/bin/env node
+
 /**
- * Obsidian CLI - Interact with Obsidian vaults
- * 
- * Usage: obsidian.js <command> [options]
- * 
- * Commands:
- *   search <query>              Search notes
- *   read <title>               Read a note
- *   list                       List all notes
- *   create <title>             Create a new note
- *   update <title>             Update a note
- *   append <title>            Append to a note
- *   tag <tag>                  Find notes by tag
- *   backlinks <title>          Find backlinks
- *   links <title>              Find outgoing links
- * 
- * Options:
- *   --vault <path>             Vault path
- *   --content <text>           Note content
- *   --folder <path>            Folder to search
- *   --limit <number>           Search result limit
- *   --json                     Output as JSON
- *   --metadata                 Include metadata
- *   --detailed                 Detailed listing
+ * Obsidian CLI - Interact with Obsidian vaults via CLI
+ * Provides file management, note creation, and vault navigation
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execSync, spawn } = require('child_process');
 
-// Configuration
-let VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || '';
-
-// Parse arguments
-const args = process.argv.slice(2);
-let command = args[0];
-
-// Check for help
-if (args.includes('--help') || args.includes('-h')) {
-    showHelp();
-}
-
-const options = {
-    vault: getArgValue('--vault'),
-    content: getArgValue('--content'),
-    folder: getArgValue('--folder'),
-    limit: getArgValue('--limit'),
-    json: args.includes('--json'),
-    metadata: args.includes('--metadata'),
-    detailed: args.includes('--detailed')
+// Colors
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m'
 };
 
-if (options.vault) VAULT_PATH = options.vault;
-if (!VAULT_PATH) {
-    console.error('Error: Vault path required. Set OBSIDIAN_VAULT_PATH or use --vault');
-    process.exit(1);
+function log(msg, color = 'reset') {
+  console.log(`${colors[color]}${msg}${colors.reset}`);
 }
 
-function getArgValue(flag) {
-    const idx = args.indexOf(flag);
-    return idx > 0 && idx < args.length - 1 ? args[idx + 1] : null;
+function getVaultPath() {
+  // Check environment variable first
+  if (process.env.OBSIDIAN_VAULT_PATH) {
+    return process.env.OBSIDIAN_VAULT_PATH;
+  }
+  
+  // Default Obsidian vault locations
+  const home = os.homedir();
+  const defaultPaths = [
+    path.join(home, 'Obsidian', 'Vault'),
+    path.join(home, 'Documents', 'Obsidian', 'Vault'),
+    path.join(home, 'Documents', 'Obsidian')
+  ];
+  
+  for (const p of defaultPaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  
+  // Try to find any .obsidian folder
+  const documents = path.join(home, 'Documents');
+  if (fs.existsSync(documents)) {
+    try {
+      const dirs = fs.readdirSync(documents);
+      for (const dir of dirs) {
+        const obsidianPath = path.join(documents, dir, '.obsidian');
+        if (fs.existsSync(obsidianPath)) {
+          return path.join(documents, dir);
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+  
+  return null;
 }
 
-function showHelp() {
-    console.log(`Obsidian CLI - Interact with Obsidian vaults
-
-Usage: obsidian.js <command> [options]
-
-Commands:
-  search <query>              Search notes
-  read <title>               Read a note
-  list                       List all notes
-  create <title>             Create a new note
-  update <title>             Update a note
-  append <title>            Append to a note
-  tag <tag>                  Find notes by tag
-  backlinks <title>          Find backlinks
-  links <title>              Find outgoing links
-
-Options:
-  --vault <path>             Vault path
-  --content <text>           Note content
-  --folder <path>            Folder to search
-  --limit <number>           Search result limit
-  --json                     Output as JSON
-  --metadata                 Include metadata
-  --detailed                 Detailed listing
-`);
-    process.exit(0);
+function parseArgs(args) {
+  const parsed = {
+    positional: [],
+    options: {}
+  };
+  
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      const key = arg.replace('--', '');
+      const next = args[i + 1];
+      if (next && !next.startsWith('--')) {
+        parsed.options[key] = next;
+        i += 2;
+      } else {
+        parsed.options[key] = true;
+        i++;
+      }
+    } else {
+      parsed.positional.push(arg);
+      i++;
+    }
+  }
+  
+  return parsed;
 }
 
-// Helper functions
-function getAllMdFiles(dir, files = []) {
+// Get all markdown files in vault
+async function getNotes(vaultPath, options = {}) {
+  const notes = [];
+  
+  function walkDir(dir) {
     const items = fs.readdirSync(dir);
-    
     for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stat = fs.statSync(fullPath);
-        
-        if (stat.isDirectory()) {
-            getAllMdFiles(fullPath, files);
-        } else if (item.endsWith('.md')) {
-            files.push(fullPath);
+      const fullPath = path.join(dir, item);
+      const stat = fs.statSync(fullPath);
+      
+      if (stat.isDirectory()) {
+        // Skip hidden folders and .obsidian
+        if (!item.startsWith('.') && item !== 'node_modules') {
+          walkDir(fullPath);
         }
+      } else if (item.endsWith('.md')) {
+        const relativePath = path.relative(vaultPath, fullPath);
+        notes.push({
+          path: fullPath,
+          relativePath,
+          name: path.basename(item, '.md')
+        });
+      }
     }
-    
-    return files;
+  }
+  
+  walkDir(vaultPath);
+  return notes;
 }
 
-function readNote(title) {
-    // Try exact match first
-    const mdPath = path.join(VAULT_PATH, title + '.md');
-    if (fs.existsSync(mdPath)) {
-        return readFile(mdPath);
-    }
-    
-    // Try with .md extension
-    const withExt = path.join(VAULT_PATH, title + '.md');
-    if (fs.existsSync(withExt)) {
-        return readFile(withExt);
-    }
-    
-    // Search for title in all files
-    const files = getAllMdFiles(VAULT_PATH);
-    for (const file of files) {
-        const content = fs.readFileSync(file, 'utf8');
-        const match = content.match(/^---\n[\s\S]*?\ntitle:\s*(.*?)\n/);
-        if (match && match[1] === title) {
-            return readFile(file);
-        }
-    }
-    
-    return null;
-}
-
-function readFile(filePath) {
-    const content = fs.readFileSync(filePath, 'utf8');
-    const stat = fs.statSync(filePath);
-    
-    // Parse frontmatter
-    let metadata = {};
-    let body = content;
-    
-    if (content.startsWith('---')) {
-        const endIndex = content.indexOf('---', 3);
-        if (endIndex !== -1) {
-            const frontmatter = content.slice(3, endIndex).trim();
-            body = content.slice(endIndex + 3).trim();
-            
-            frontmatter.split('\n').forEach(line => {
-                const [key, ...valueParts] = line.split(':');
-                if (key && valueParts.length) {
-                    let value = valueParts.join(':').trim();
-                    // Remove quotes
-                    value = value.replace(/^["']|["']$/g, '');
-                    metadata[key.trim()] = value;
-                }
-            });
-        }
-    }
-    
-    return {
-        path: path.relative(VAULT_PATH, filePath),
-        title: metadata.title || path.basename(filePath, '.md'),
-        content: body,
-        metadata,
-        created: stat.birthtime,
-        modified: stat.mtime
-    };
-}
-
-function searchNotes(query) {
-    const files = getAllMdFiles(VAULT_PATH);
-    const results = [];
-    const limit = parseInt(options.limit) || 50;
-    
-    for (const file of files) {
-        if (results.length >= limit) break;
-        
-        const content = fs.readFileSync(file, 'utf8');
-        const title = path.basename(file, '.md');
-        
-        if (content.toLowerCase().includes(query.toLowerCase()) ||
-            title.toLowerCase().includes(query.toLowerCase())) {
-            // Extract context around match
-            const lowerContent = content.toLowerCase();
-            const matchIndex = lowerContent.indexOf(query.toLowerCase());
-            let context = '';
-            
-            if (matchIndex !== -1) {
-                const start = Math.max(0, matchIndex - 50);
-                const end = Math.min(content.length, matchIndex + query.length + 50);
-                context = (start > 0 ? '...' : '') + 
-                          content.slice(start, end) + 
-                          (end < content.length ? '...' : '');
-            }
-            
-            results.push({
-                title,
-                path: path.relative(VAULT_PATH, file),
-                context: context.trim()
-            });
-        }
-    }
-    
-    return results;
-}
-
-function listNotes() {
-    const files = getAllMdFiles(VAULT_PATH);
-    const results = [];
-    
-    for (const file of files) {
-        let relativePath = path.relative(VAULT_PATH, file);
-        
-        // Filter by folder if specified
-        if (options.folder && !relativePath.startsWith(options.folder)) {
-            continue;
-        }
-        
-        const stat = fs.statSync(file);
-        const content = fs.readFileSync(file, 'utf8');
-        
-        // Extract title from frontmatter or filename
-        let title = path.basename(file, '.md');
-        let tags = [];
-        
-        if (content.startsWith('---')) {
-            const endIndex = content.indexOf('---', 3);
-            if (endIndex !== -1) {
-                const frontmatter = content.slice(3, endIndex);
-                const titleMatch = frontmatter.match(/title:\s*(.*)/);
-                if (titleMatch) title = titleMatch[1].trim().replace(/^["']|["']$/g, '');
-                
-                const tagsMatch = frontmatter.match(/tags:\s*\[(.*?)\]/);
-                if (tagsMatch) {
-                    tags = tagsMatch[1].split(',').map(t => t.trim().replace(/["']/g, ''));
-                }
-            }
-        }
+// Search notes by content
+async function searchNotes(vaultPath, query, options = {}) {
+  const notes = await getNotes(vaultPath);
+  const results = [];
+  
+  for (const note of notes) {
+    try {
+      const content = fs.readFileSync(note.path, 'utf8');
+      if (content.toLowerCase().includes(query.toLowerCase())) {
+        // Get context around match
+        const index = content.toLowerCase().indexOf(query.toLowerCase());
+        const start = Math.max(0, index - 50);
+        const end = Math.min(content.length, index + query.length + 50);
+        const context = content.substring(start, end).replace(/\n/g, ' ');
         
         results.push({
-            title,
-            path: relativePath,
-            tags,
-            modified: stat.mtime,
-            size: stat.size
+          ...note,
+          context
         });
+      }
+    } catch (e) {
+      // Skip unreadable files
     }
-    
-    return results.sort((a, b) => b.modified - a.modified);
+  }
+  
+  return results;
 }
 
-function createNote(title, content = '') {
-    const sanitizedTitle = title.replace(/[<>:"/\\|?*]/g, '-');
-    const filePath = path.join(VAULT_PATH, sanitizedTitle + '.md');
-    
-    if (fs.existsSync(filePath)) {
-        console.error(`Note already exists: ${title}`);
-        process.exit(1);
-    }
-    
-    const noteContent = content || `# ${title}\n\n`;
-    fs.writeFileSync(filePath, noteContent);
-    
-    return {
-        title,
-        path: sanitizedTitle + '.md',
-        created: true
-    };
-}
-
-function updateNote(title, newContent) {
-    const note = readNote(title);
-    if (!note) {
-        console.error(`Note not found: ${title}`);
-        process.exit(1);
-    }
-    
-    const filePath = path.join(VAULT_PATH, note.path);
-    
-    // Preserve frontmatter if exists
-    let fullContent = newContent;
-    if (note.content !== fs.readFileSync(filePath, 'utf8')) {
-        // Rebuild with frontmatter
-        const frontmatter = Object.entries(note.metadata)
-            .map(([k, v]) => `${k}: "${v}"`)
-            .join('\n');
-        fullContent = `---\n${frontmatter}\n---\n\n${newContent}`;
-    }
-    
-    fs.writeFileSync(filePath, fullContent);
-    
-    return {
-        title,
-        path: note.path,
-        updated: true
-    };
-}
-
-function appendToNote(title, additionalContent) {
-    const note = readNote(title);
-    if (!note) {
-        console.error(`Note not found: ${title}`);
-        process.exit(1);
-    }
-    
-    const filePath = path.join(VAULT_PATH, note.path);
-    const currentContent = fs.readFileSync(filePath, 'utf8');
-    fs.writeFileSync(filePath, currentContent + '\n\n' + additionalContent);
-    
-    return {
-        title,
-        appended: true
-    };
-}
-
-function findByTag(tag) {
-    const files = getAllMdFiles(VAULT_PATH);
-    const results = [];
-    
-    for (const file of files) {
-        const content = fs.readFileSync(file, 'utf8');
-        
-        // Check frontmatter tags
-        let hasTag = false;
-        if (content.startsWith('---')) {
-            const endIndex = content.indexOf('---', 3);
-            if (endIndex !== -1) {
-                const frontmatter = content.slice(3, endIndex);
-                if (frontmatter.includes(tag) || frontmatter.includes(`[${tag}`)) {
-                    hasTag = true;
-                }
-            }
-        }
-        
-        // Check body tags #tag
-        if (content.includes(`#${tag}`)) {
-            hasTag = true;
-        }
-        
-        if (hasTag) {
-            results.push({
-                title: path.basename(file, '.md'),
-                path: path.relative(VAULT_PATH, file)
-            });
-        }
-    }
-    
-    return results;
-}
-
-function findBacklinks(title) {
-    const files = getAllMdFiles(VAULT_PATH);
-    const results = [];
-    const linkVariants = [
-        `[[${title}]]`,
-        `[[${title}|`,
-        title  // Plain mention
-    ];
-    
-    for (const file of files) {
-        const content = fs.readFileSync(file, 'utf8');
-        const fileName = path.basename(file, '.md');
-        
-        // Skip the note itself
-        if (fileName === title) continue;
-        
-        for (const variant of linkVariants) {
-            if (content.includes(variant)) {
-                results.push({
-                    title: fileName,
-                    path: path.relative(VAULT_PATH, file)
-                });
-                break;
-            }
-        }
-    }
-    
-    return results;
-}
-
-function findLinks(title) {
-    const note = readNote(title);
-    if (!note) {
-        console.error(`Note not found: ${title}`);
-        process.exit(1);
-    }
-    
-    const links = [];
-    const linkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-    let match;
-    
-    while ((match = linkRegex.exec(note.content)) !== null) {
-        links.push(match[1]);
-    }
-    
-    return links;
-}
-
-// Output helpers
-function output(data) {
-    if (options.json) {
-        console.log(JSON.stringify(data, null, 2));
-    } else if (Array.isArray(data)) {
-        data.forEach(item => console.log(JSON.stringify(item)));
+// Get or create a note
+async function getNote(vaultPath, notePath, create = false) {
+  const fullPath = path.join(vaultPath, notePath);
+  const noteName = path.basename(fullPath, '.md');
+  const dir = path.dirname(fullPath);
+  
+  // Create directory if needed
+  if (!fs.existsSync(dir)) {
+    if (create) {
+      fs.mkdirSync(dir, { recursive: true });
     } else {
-        console.log(JSON.stringify(data, null, 2));
+      throw new Error(`Directory does not exist: ${dir}`);
     }
-}
+  }
+  
+  if (!fs.existsSync(fullPath)) {
+    if (create) {
+      // Create new note with frontmatter
+      const template = `---
+created: ${new Date().toISOString()}
+tags: []
+---
 
-function formatList(notes) {
-    if (options.json) {
-        output(notes);
-        return;
-    }
-    
-    if (options.detailed) {
-        notes.forEach(note => {
-            console.log(`${note.title}`);
-            console.log(`  Path: ${note.path}`);
-            console.log(`  Tags: ${note.tags?.join(', ') || 'none'}`);
-            console.log(`  Modified: ${note.modified.toISOString().slice(0, 10)}`);
-            console.log('');
-        });
+# ${noteName}
+
+`;
+      fs.writeFileSync(fullPath, template);
+      return { path: fullPath, created: true };
     } else {
-        notes.forEach(note => {
-            console.log(note.title);
-        });
+      throw new Error(`Note does not exist: ${notePath}`);
     }
+  }
+  
+  return { path: fullPath, created: false };
 }
 
-// Main dispatcher
-function main() {
-    if (!command) {
-        showHelp();
-        return;
+// Extract frontmatter from note
+function parseFrontmatter(content) {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return { frontmatter: {}, content };
+  
+  const frontmatter = {};
+  const lines = match[1].split('\n');
+  for (const line of lines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0) {
+      const key = line.substring(0, colonIndex).trim();
+      let value = line.substring(colonIndex + 1).trim();
+      // Remove quotes
+      value = value.replace(/^["']|["']$/g, '');
+      frontmatter[key] = value;
     }
-    
-    const param1 = args[1];
-    const param2 = args[2];
+  }
+  
+  return {
+    frontmatter,
+    content: content.substring(match[0].length)
+  };
+}
+
+// Commands
+async function cmdList(vaultPath, options) {
+  const notes = await getNotes(vaultPath);
+  
+  if (options.json) {
+    console.log(JSON.stringify(notes, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Notes in Vault${colors.reset}\n`, 'cyan');
+  log(`Total: ${notes.length} notes\n`);
+  
+  // Group by folder
+  const folders = {};
+  for (const note of notes) {
+    const folder = path.dirname(note.relativePath);
+    if (!folders[folder]) folders[folder] = [];
+    folders[folder].push(note);
+  }
+  
+  for (const [folder, folderNotes] of Object.entries(folders)) {
+    log(`\n${colors.yellow}${folder || '.'}/${colors.reset}`);
+    for (const note of folderNotes) {
+      log(`  ${note.name}`, 'green');
+    }
+  }
+}
+
+async function cmdSearch(vaultPath, query, options) {
+  if (!query) {
+    log('Error: Search query required', 'red');
+    process.exit(1);
+  }
+  
+  const results = await searchNotes(vaultPath, query);
+  
+  if (options.json) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Search Results for "${query}"${colors.reset}\n`, 'cyan');
+  log(`Found: ${results.length} notes\n`);
+  
+  for (const result of results) {
+    log(`${result.relativePath}`, 'green');
+    log(`  ${result.context}...`);
+    log('');
+  }
+}
+
+async function cmdRead(vaultPath, notePath, options) {
+  if (!notePath) {
+    log('Error: Note path required', 'red');
+    process.exit(1);
+  }
+  
+  const { path: fullPath } = await getNote(vaultPath, notePath);
+  const content = fs.readFileSync(fullPath, 'utf8');
+  const { frontmatter, content: body } = parseFrontmatter(content);
+  
+  if (options.json) {
+    console.log(JSON.stringify({ frontmatter, body, path: fullPath }, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}${path.basename(fullPath, '.md')}${colors.reset}\n`, 'cyan');
+  
+  if (Object.keys(frontmatter).length > 0) {
+    log(`${colors.yellow}Frontmatter:${colors.reset}`);
+    for (const [key, value] of Object.entries(frontmatter)) {
+      log(`  ${key}: ${value}`);
+    }
+    log('');
+  }
+  
+  log(body);
+}
+
+async function cmdCreate(vaultPath, notePath, options) {
+  if (!notePath) {
+    log('Error: Note path required', 'red');
+    process.exit(1);
+  }
+  
+  // Ensure .md extension
+  if (!notePath.endsWith('.md')) {
+    notePath = notePath + '.md';
+  }
+  
+  const { path: fullPath, created } = await getNote(vaultPath, notePath, true);
+  
+  if (created) {
+    log(`\n${colors.green}Created note: ${path.relative(vaultPath, fullPath)}${colors.reset}`);
+  } else {
+    log(`\n${colors.yellow}Note already exists: ${path.relative(vaultPath, fullPath)}${colors.reset}`);
+  }
+}
+
+async function cmdWrite(vaultPath, notePath, options) {
+  if (!notePath) {
+    log('Error: Note path required', 'red');
+    process.exit(1);
+  }
+  
+  if (!options.content && !options.append) {
+    log('Error: --content or --append required', 'red');
+    process.exit(1);
+  }
+  
+  // Ensure .md extension
+  if (!notePath.endsWith('.md')) {
+    notePath = notePath + '.md';
+  }
+  
+  const { path: fullPath } = await getNote(vaultPath, notePath, true);
+  
+  if (options.append) {
+    fs.appendFileSync(fullPath, '\n' + options.content);
+    log(`\n${colors.green}Appended to note${colors.reset}`);
+  } else {
+    fs.writeFileSync(fullPath, options.content);
+    log(`\n${colors.green}Wrote note${colors.reset}`);
+  }
+}
+
+async function cmdTags(vaultPath, options) {
+  const notes = await getNotes(vaultPath);
+  const allTags = {};
+  
+  for (const note of notes) {
+    try {
+      const content = fs.readFileSync(note.path, 'utf8');
+      const { frontmatter } = parseFrontmatter(content);
+      
+      // Check frontmatter tags
+      if (frontmatter.tags) {
+        const tags = Array.isArray(frontmatter.tags) 
+          ? frontmatter.tags 
+          : frontmatter.tags.split(',').map(t => t.trim());
+        for (const tag of tags) {
+          if (!allTags[tag]) allTags[tag] = [];
+          allTags[tag].push(note.relativePath);
+        }
+      }
+      
+      // Check content tags (#tag)
+      const tagMatches = content.match(/#[a-zA-Z0-9_-]+/g) || [];
+      for (const tag of tagMatches) {
+        const tagName = tag.substring(1);
+        if (!allTags[tagName]) allTags[tagName] = [];
+        if (!allTags[tagName].includes(note.relativePath)) {
+          allTags[tagName].push(note.relativePath);
+        }
+      }
+    } catch (e) {
+      // Skip unreadable files
+    }
+  }
+  
+  if (options.json) {
+    console.log(JSON.stringify(allTags, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Tags in Vault${colors.reset}\n`, 'cyan');
+  
+  const sortedTags = Object.keys(allTags).sort();
+  for (const tag of sortedTags) {
+    log(`#${tag}: ${allTags[tag].length} notes`, 'green');
+  }
+}
+
+async function cmdBacklinks(vaultPath, notePath, options) {
+  if (!notePath) {
+    log('Error: Note path required', 'red');
+    process.exit(1);
+  }
+  
+  // Get note name without extension
+  const noteName = path.basename(notePath, '.md');
+  const notes = await getNotes(vaultPath);
+  const backlinks = [];
+  
+  for (const note of notes) {
+    if (note.relativePath === notePath) continue;
     
     try {
-        switch (command) {
-            case 'search':
-                if (!param1) {
-                    console.error('Search query required');
-                    process.exit(1);
-                }
-                output(searchNotes(param1));
-                break;
-                
-            case 'read':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                const note = readNote(param1);
-                if (!note) {
-                    console.error(`Note not found: ${param1}`);
-                    process.exit(1);
-                }
-                if (options.metadata || options.json) {
-                    output(note);
-                } else {
-                    console.log(note.content);
-                }
-                break;
-                
-            case 'list':
-                const notes = listNotes();
-                formatList(notes);
-                break;
-                
-            case 'create':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                output(createNote(param1, options.content));
-                break;
-                
-            case 'update':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                if (!options.content) {
-                    console.error('--content required for update');
-                    process.exit(1);
-                }
-                output(updateNote(param1, options.content));
-                break;
-                
-            case 'append':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                if (!options.content) {
-                    console.error('--content required for append');
-                    process.exit(1);
-                }
-                output(appendToNote(param1, options.content));
-                break;
-                
-            case 'tag':
-                if (!param1) {
-                    console.error('Tag required');
-                    process.exit(1);
-                }
-                output(findByTag(param1));
-                break;
-                
-            case 'backlinks':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                output(findBacklinks(param1));
-                break;
-                
-            case 'links':
-                if (!param1) {
-                    console.error('Note title required');
-                    process.exit(1);
-                }
-                output(findLinks(param1));
-                break;
-                
-            default:
-                console.error(`Unknown command: ${command}`);
-                showHelp();
-        }
+      const content = fs.readFileSync(note.path, 'utf8');
+      // Check for wiki links [[NoteName]]
+      if (content.includes(`[[${noteName}]]`)) {
+        backlinks.push({
+          source: note.relativePath,
+          type: 'wiki-link'
+        });
+      }
+      // Check for markdown links [text](note.md)
+      if (content.includes(`](${noteName}.md)`) || content.includes(`](${notePath})`)) {
+        backlinks.push({
+          source: note.relativePath,
+          type: 'markdown-link'
+        });
+      }
     } catch (e) {
-        console.error('Error:', e.message);
+      // Skip
+    }
+  }
+  
+  if (options.json) {
+    console.log(JSON.stringify(backlinks, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Backlinks to ${noteName}${colors.reset}\n`, 'cyan');
+  
+  if (backlinks.length === 0) {
+    log('No backlinks found');
+    return;
+  }
+  
+  for (const link of backlinks) {
+    log(`[[${link.source}]]`, 'green');
+    log(`  Type: ${link.type}`);
+    log('');
+  }
+}
+
+async function cmdGraph(vaultPath, options) {
+  const notes = await getNotes(vaultPath);
+  const links = [];
+  
+  for (const note of notes) {
+    try {
+      const content = fs.readFileSync(note.path, 'utf8');
+      const wikiLinks = content.match(/\[\[([^\]]+)\]\]/g) || [];
+      
+      for (const link of wikiLinks) {
+        const target = link.replace(/\[\[|\]\]/g, '');
+        links.push({
+          source: note.name,
+          target
+        });
+      }
+    } catch (e) {
+      // Skip
+    }
+  }
+  
+  if (options.json) {
+    console.log(JSON.stringify({ notes: notes.map(n => n.name), links }, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Vault Graph${colors.reset}\n`, 'cyan');
+  log(`Notes: ${notes.length}`);
+  log(`Links: ${links.length}\n`);
+  
+  // Show some link examples
+  const sample = links.slice(0, 20);
+  for (const link of sample) {
+    log(`${link.source} → ${link.target}`, 'green');
+  }
+  
+  if (links.length > 20) {
+    log(`\n... and ${links.length - 20} more links`);
+  }
+}
+
+async function cmdRecent(vaultPath, options) {
+  const notes = await getNotes(vaultPath);
+  
+  // Sort by modification time
+  const withTimes = notes.map(note => ({
+    ...note,
+    mtime: fs.statSync(note.path).mtime
+  }));
+  
+  withTimes.sort((a, b) => b.mtime - a.mtime);
+  
+  const limit = parseInt(options.n) || 10;
+  const recent = withTimes.slice(0, limit);
+  
+  if (options.json) {
+    console.log(JSON.stringify(recent, null, 2));
+    return;
+  }
+  
+  log(`\n${colors.bright}Recent Notes${colors.reset}\n`, 'cyan');
+  
+  for (const note of recent) {
+    log(`${note.relativePath}`, 'green');
+    log(`  Modified: ${note.mtime.toLocaleString()}`);
+    log('');
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  
+  const vaultPath = getVaultPath();
+  
+  if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+    log(`
+${colors.bright}Obsidian CLI${colors.reset}
+Interact with Obsidian vaults
+
+${colors.cyan}Commands:${colors.reset}
+  obsidian.js list                    List all notes
+  obsidian.js search <query>          Search notes by content
+  obsidian.js read <note-path>       Read a note
+  obsidian.js create <note-path>     Create a new note
+  obsidian.js write <note-path> --content "text"
+  obsidian.js write <note-path> --append "text"
+  obsidian.js tags                    List all tags
+  obsidian.js backlinks <note-path> Find backlinks
+  obsidian.js graph                   Show note links
+  obsidian.js recent                  Recent notes
+
+${colors.cyan}Options:${colors.reset}
+  --json    JSON output
+  -n <num>  Number of results
+
+${colors.cyan}Environment:${colors.reset}
+  OBSIDIAN_VAULT_PATH    Path to vault
+
+${colors.cyan}Examples:${colors.reset}
+  obsidian.js list
+  obsidian.js search "TODO"
+  obsidian.js read "Journal/2024-01-01.md"
+  obsidian.js create "Notes/New Idea.md"
+  obsidian.js tags
+`);
+    process.exit(0);
+  }
+  
+  if (!vaultPath) {
+    log('Error: Obsidian vault not found. Set OBSIDIAN_VAULT_PATH environment variable.', 'red');
+    process.exit(1);
+  }
+  
+  log(`Using vault: ${vaultPath}`, 'blue');
+  
+  const cmd = args[0];
+  const cmdArgs = args.slice(1);
+  const { positional, options } = parseArgs(cmdArgs);
+  
+  try {
+    switch (cmd) {
+      case 'list':
+        await cmdList(vaultPath, options);
+        break;
+      case 'search':
+        await cmdSearch(vaultPath, positional.join(' '), options);
+        break;
+      case 'read':
+        await cmdRead(vaultPath, positional[0], options);
+        break;
+      case 'create':
+        await cmdCreate(vaultPath, positional[0], options);
+        break;
+      case 'write':
+        await cmdWrite(vaultPath, positional[0], options);
+        break;
+      case 'tags':
+        await cmdTags(vaultPath, options);
+        break;
+      case 'backlinks':
+        await cmdBacklinks(vaultPath, positional[0], options);
+        break;
+      case 'graph':
+        await cmdGraph(vaultPath, options);
+        break;
+      case 'recent':
+        await cmdRecent(vaultPath, options);
+        break;
+      default:
+        log(`Unknown command: ${cmd}`, 'red');
         process.exit(1);
     }
+  } catch (error) {
+    log(`Error: ${error.message}`, 'red');
+    process.exit(1);
+  }
 }
 
 main();
