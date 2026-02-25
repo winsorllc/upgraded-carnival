@@ -59,7 +59,7 @@
     "name": "repo-scan-glm5",
     "schedule": "0 1 * * *",
     "type": "agent",
-    "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
+    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Pick the best new idea and actually WRITE the code to implement it as a new PopeBot skill in your sandbox (.pi/skills/). Write and execute a test to prove it works. Use the send_email tool to email winsorllc@yahoo.com a progress report detailing what you built, how you implemented it, your test results, and code samples so the user can review it at 8 AM.",
     "llm_provider": "custom",
     "llm_model": "glm-5",
     "enabled": true
@@ -68,7 +68,7 @@
     "name": "repo-scan-minimax",
     "schedule": "5 1 * * *",
     "type": "agent",
-    "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
+    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Pick the best new idea and actually WRITE the code to implement it as a new PopeBot skill in your sandbox (.pi/skills/). Write and execute a test to prove it works. Use the send_email tool to email winsorllc@yahoo.com a progress report detailing what you built, how you implemented it, your test results, and code samples so the user can review it at 8 AM.",
     "llm_provider": "custom",
     "llm_model": "minimax-m2.5",
     "enabled": true
@@ -77,7 +77,7 @@
     "name": "repo-scan-kimi",
     "schedule": "10 1 * * *",
     "type": "agent",
-    "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
+    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Pick the best new idea and actually WRITE the code to implement it as a new PopeBot skill in your sandbox (.pi/skills/). Write and execute a test to prove it works. Use the send_email tool to email winsorllc@yahoo.com a progress report detailing what you built, how you implemented it, your test results, and code samples so the user can review it at 8 AM.",
     "llm_provider": "custom",
     "llm_model": "kimi-k2.5",
     "enabled": true
@@ -86,7 +86,7 @@
     "name": "repo-scan-qwen",
     "schedule": "15 1 * * *",
     "type": "agent",
-    "job": "Clone and scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for recent commits, new skills, and structural ideas. Analyze how PopeBot could implement these new tools. Use the send_email tool to email the summary to winsorllc@yahoo.com.",
+    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Pick the best new idea and actually WRITE the code to implement it as a new PopeBot skill in your sandbox (.pi/skills/). Write and execute a test to prove it works. Use the send_email tool to email winsorllc@yahoo.com a progress report detailing what you built, how you implemented it, your test results, and code samples so the user can review it at 8 AM.",
     "llm_provider": "custom",
     "llm_model": "qwen3.5",
     "enabled": true
