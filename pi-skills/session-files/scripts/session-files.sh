@@ -30,53 +30,124 @@ if [[ "$BRANCH" == job/* ]]; then
     # Get all files changed from base (committed changes)
     CHANGED_FILES=$(git diff --name-status "$BASE_BRANCH"...HEAD 2>/dev/null || echo "")
     
-    # Get untracked files (not in any commit)
-    UNTRACKED_FILES=$(git status --porcelain 2>/dev/null | grep "^??" | cut -c4- || true)
+    # Get working directory changes (staged and unstaged)
+    WORKING_STATUS=$(git status --porcelain 2>/dev/null || echo "")
     
-    # Combine changed and untracked
-    TOTAL_FILES="$CHANGED_FILES"$'\n'"$UNTRACKED_FILES"
-    
-    if [ -z "$(echo "$TOTAL_FILES" | grep -v '^$')" ]; then
+    if [ -z "$CHANGED_FILES" ] && [ -z "$WORKING_STATUS" ]; then
         echo "  ──────────────────────────────────────────────────"
         echo "  No files changed from $BASE_BRANCH"
         echo "  (working directory is clean)"
         echo "  ──────────────────────────────────────────────────"
     else
-        # Categorize files
+        # Parse working directory status
+        # Format: XY filename (X = staged, Y = working tree)
+        # M  = modified in working tree
+        # M  = modified in staging area (first char)
+        # A  = added to staging area
+        # ?? = untracked
+        
+        declare -A modified_files
+        declare -A added_files
+        declare -A deleted_files
+        
+        # Process working directory status
+        while IFS= read -r line; do
+            if [ -z "$line" ]; then
+                continue
+            fi
+            status="${line:0:2}"
+            file="${line:3}"
+            
+            # Check first char (staged)
+            staged="${status:0:1}"
+            # Check second char (working tree)
+            working="${status:1:1}"
+            
+            if [ "$staged" = "?" ] && [ "$working" = "?" ]; then
+                added_files["$file"]="untracked"
+            elif [ "$working" = "M" ]; then
+                if [ "$staged" = "M" ]; then
+                    modified_files["$file"]="staged"
+                else
+                    modified_files["$file"]="unstaged"
+                fi
+            elif [ "$staged" = "M" ]; then
+                modified_files["$file"]="staged"
+            elif [ "$staged" = "A" ]; then
+                added_files["$file"]="staged"
+            elif [ "$working" = "D" ]; then
+                deleted_files["$file"]="unstaged"
+            elif [ "$staged" = "D" ]; then
+                deleted_files["$file"]="staged"
+            fi
+        done <<< "$WORKING_STATUS"
+        
+        # Process committed changes
+        while IFS= read -r line; do
+            if [ -z "$line" ]; then
+                continue
+            fi
+            status="${line:0:1}"
+            file="${line:2}"
+            
+            case "$status" in
+                M) modified_files["$file"]="committed" ;;
+                A) added_files["$file"]="committed" ;;
+                D) deleted_files["$file"]="committed" ;;
+            esac
+        done <<< "$CHANGED_FILES"
+        
         echo "  ──────────────────────────────────────────────────"
         echo "  📝 Modified Files:"
         echo "  ──────────────────────────────────────────────────"
-        MODIFIED=$(echo "$CHANGED_FILES" | grep "^[M]" || true)
-        if [ -n "$MODIFIED" ]; then
-            echo "$MODIFIED" | sed 's/^M\t/    /'
-        else
+        
+        if [ ${#modified_files[@]} -eq 0 ]; then
             echo "    (none)"
+        else
+            for file in "${!modified_files[@]}"; do
+                status="${modified_files[$file]}"
+                case "$status" in
+                    committed) echo "    $file" ;;
+                    staged) echo "    $file (staged)" ;;
+                    unstaged) echo "    $file (unstaged)" ;;
+                esac
+            done
         fi
         echo ""
         
         echo "  ──────────────────────────────────────────────────"
         echo "  ➕ Added Files:"
         echo "  ──────────────────────────────────────────────────"
-        ADDED=$(echo "$CHANGED_FILES" | grep "^[A]" || true)
-        if [ -n "$ADDED" ]; then
-            echo "$ADDED" | sed 's/^A\t/    /'
-        fi
-        if [ -n "$UNTRACKED_FILES" ]; then
-            echo "$UNTRACKED_FILES" | sed 's/^/    (untracked) /'
-        fi
-        if [ -z "$ADDED" ] && [ -z "$UNTRACKED_FILES" ]; then
+        
+        if [ ${#added_files[@]} -eq 0 ]; then
             echo "    (none)"
+        else
+            for file in "${!added_files[@]}"; do
+                status="${added_files[$file]}"
+                case "$status" in
+                    committed) echo "    $file" ;;
+                    staged) echo "    $file (staged)" ;;
+                    untracked) echo "    $file (untracked)" ;;
+                esac
+            done
         fi
         echo ""
         
         echo "  ──────────────────────────────────────────────────"
         echo "  🗑️  Deleted Files:"
         echo "  ──────────────────────────────────────────────────"
-        DELETED=$(echo "$CHANGED_FILES" | grep "^[D]" || true)
-        if [ -n "$DELETED" ]; then
-            echo "$DELETED" | sed 's/^D\t/    /'
-        else
+        
+        if [ ${#deleted_files[@]} -eq 0 ]; then
             echo "    (none)"
+        else
+            for file in "${!deleted_files[@]}"; do
+                status="${deleted_files[$file]}"
+                case "$status" in
+                    committed) echo "    $file" ;;
+                    staged) echo "    $file (staged)" ;;
+                    unstaged) echo "    $file (unstaged)" ;;
+                esac
+            done
         fi
         echo ""
     fi
@@ -91,11 +162,13 @@ else
         echo "  No changes in working directory"
     else
         echo "  ──────────────────────────────────────────────────"
-        echo "$STATUS" | while read line; do
-            status="${line:0:2}"
-            file="${line:3}"
-            printf "    [%s] %s\n" "$status" "$file"
-        done
+        while IFS= read -r line; do
+            if [ -n "$line" ] && [ ${#line} -ge 3 ]; then
+                status="${line:0:2}"
+                file="${line:3}"
+                printf "    [%s] %s\n" "$status" "$file"
+            fi
+        done <<< "$STATUS"
     fi
 fi
 
