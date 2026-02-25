@@ -1,0 +1,9 @@
+{"timestamp":"2026-02-25T14:07:30Z","model":"claude-sonnet-4-20250514","tokens":2500,"input_tokens":1800,"output_tokens":700,"cost":0.0375}
+{"timestamp":"2026-02-25T14:09:00Z","model":"claude-sonnet-4-20250514","tokens":3200,"input_tokens":2400,"output_tokens":800,"cost":0.048}
+{"timestamp":"2026-02-25T14:11:00Z","model":"claude-sonnet-4-20250514","tokens":2800,"input_tokens":2100,"output_tokens":700,"cost":0.042}
+{"timestamp":"2026-02-25T14:15:00Z","model":"claude-sonnet-4-20250514","tokens":1800,"input_tokens":1400,"output_tokens":400,"cost":0.027}
+{"timestamp":"2026-02-25T14:17:00Z","model":"claude-sonnet-4-20250514","tokens":2200,"input_tokens":1600,"output_tokens":600,"cost":0.033}
+{"timestamp":"2026-02-25T14:20:00Z","model":"claude-sonnet-4-20250514","tokens":3500,"input_tokens":2600,"output_tokens":900,"cost":0.0525}
+{"timestamp":"2026-02-25T14:23:00Z","model":"claude-sonnet-4-20250514","tokens":4000,"input_tokens":3000,"output_tokens":1000,"cost":0.06}
+{"timestamp":"2026-02-25T14:26:00Z","model":"claude-sonnet-4-20250514","tokens":2800,"input_tokens":2100,"output_tokens":700,"cost":0.042}
+{"timestamp":"2026-02-25T14:28:00Z","model":"claude-sonnet-4-20250514","tokens":2500,"input_tokens":1900,"output_tokens":600,"cost":0.0375}
