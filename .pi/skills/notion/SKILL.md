@@ -1,136 +1,208 @@
 ---
 name: notion
-description: "Notion API for creating and managing pages, databases, and blocks. Requires NOTION_API_KEY or NOTION_TOKEN secret. Use when you need to create, read, update, or search Notion pages and databases."
+description: "Access and manage Notion pages, databases, and content via the Notion API. Use when: user wants to read Notion pages, query databases, create pages, or manage Notion workspaces. Requires: Notion integration token."
+metadata:
+  openclaw:
+    emoji: "📝"
+    requires:
+      bins:
+        - curl
+        - jq
+    env:
+      - NOTION_API_KEY
 ---
 
 # Notion Skill
 
-Use the Notion API to create, read, update pages, databases, and blocks.
+Interact with Notion workspaces via the official Notion API.
 
 ## When to Use
 
 ✅ **USE this skill when:**
 
-- Creating new Notion pages or database entries
-- Querying Notion databases
-- Searching for pages by title
-- Updating page content or properties
-- Adding blocks (text, headings, lists) to pages
-
-## When NOT to Use
+- Read Notion pages and their content
+- Query Notion databases
+- Create new pages
+- Update page content
+- Search Notion workspace
 
 ❌ **DON'T use this skill when:**
 
-- Heavy data processing → use export + local tools
-- Complex views/filters → Notion web UI only
-- Database schema changes → limited API support
+- User hasn't set up a Notion integration
+- Need real-time collaboration features
+- Complex nested page operations
 
-## Setup
+## Prerequisites
 
-1. Create an integration at https://notion.so/my-integrations
-2. Copy the API key (starts with `ntn_` or `secret_`)
-3. Add to your secrets as `NOTION_API_KEY` or `NOTION_TOKEN`
-4. Share target pages/databases with your integration (click "..." → "Connect to" → your integration name)
+1. Create a Notion integration at https://www.notion.so/my-integrations
+2. Get the Internal Integration Token
+3. Share pages/databases with the integration in Notion
 
-## Commands
-
-### Search
+## Environment Variables
 
 ```bash
-{baseDir}/notion.sh search "page title"
-{baseDir}/notion.sh search "database name" --type=database
+NOTION_API_KEY="secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+NOTION_DATABASE_ID="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # For database operations
 ```
+
+## Commands
 
 ### Get Page
 
 ```bash
-{baseDir}/notion.sh get-page <page_id>
-```
+# Get page metadata
+curl -s "https://api.notion.com/v1/pages/PAGE_ID" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28"
 
-### Get Database
-
-```bash
-{baseDir}/notion.sh get-database <database_id>
+# Get page content (blocks)
+curl -s "https://api.notion.com/v1/blocks/PAGE_ID/children" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28"
 ```
 
 ### Query Database
 
 ```bash
-{baseDir}/notion.sh query <database_id>
-{baseDir}/notion.sh query <database_id> --filter='{"property":"Status","select":{"equals":"Todo"}}'
-{baseDir}/notion.sh query <database_id> --sort='{"property":"Date","direction":"descending"}'
+# Query all items
+curl -s "https://api.notion.com/v1/databases/DATABASE_ID/query" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -X POST
+
+# Query with filter
+curl -s "https://api.notion.com/v1/databases/DATABASE_ID/query" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  -d '{
+    "filter": {
+      "property": "Status",
+      "status": {
+        "equals": "In Progress"
+      }
+    }
+  }'
 ```
 
-### Create Page in Database
+### Search Workspace
 
 ```bash
-{baseDir}/notion.sh create-page --database=<database_id> --title="New Task" --properties='{"Status":{"select":{"name":"Todo"}}}'
+# Search all pages
+curl -s "https://api.notion.com/v1/search" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  -d '{
+    "query": "search term",
+    "filter": {
+      "value": "page",
+      "property": "object"
+    }
+  }'
 ```
 
-### Create Page (Child)
+### Create Page
 
 ```bash
-{baseDir}/notion.sh create-page --parent=<page_id> --title="New Page"
+# Create page with content
+curl -s "https://api.notion.com/v1/pages" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  -d '{
+    "parent": { "page_id": "PARENT_PAGE_ID" },
+    "properties": {
+      "title": {
+        "title": [
+          { "text": { "content": "New Page Title" } }
+        ]
+      }
+    },
+    "children": [
+      {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+          "rich_text": [
+            { "text": { "content": "Hello from the agent!" } }
+          ]
+        }
+      }
+    ]
+  }'
 ```
 
-### Update Page
+### Create Database Entry
 
 ```bash
-{baseDir}/notion.sh update-page <page_id> --properties='{"Status":{"select":{"name":"Done"}}}'
+# Add row to database
+curl -s "https://api.notion.com/v1/pages" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  -d '{
+    "parent": { "database_id": "DATABASE_ID" },
+    "properties": {
+      "Name": {
+        "title": [
+          { "text": { "content": "New Item" } }
+        ]
+      },
+      "Status": {
+        "status": { "name": "To Do" }
+      },
+      "Tags": {
+        "multi_select": [
+          { "name": "agent" }
+        ]
+      }
+    }
+  }'
 ```
 
-### Add Blocks to Page
+### Extract Text Content
 
 ```bash
-{baseDir}/notion.sh add-blocks <page_id> --blocks='[{"type":"paragraph","paragraph":{"rich_text":[{"text":{"content":"Hello world"}}]}}]'
+# Extract all paragraph text from page
+curl -s "https://api.notion.com/v1/blocks/PAGE_ID/children?page_size=100" \
+  -H "Authorization: Bearer $NOTION_API_KEY" \
+  -H "Notion-Version: 2022-06-28" \
+  | jq -r '.results[] | select(.type == "paragraph") | .paragraph.rich_text[]?.text.content' 2>/dev/null
 ```
 
-### Get Page Content
+### Helper Functions
 
 ```bash
-{baseDir}/notion.sh get-blocks <page_id>
-```
+# Quick page summary
+notion_page_summary() {
+  PAGE_ID=$1
+  curl -s "https://api.notion.com/v1/pages/$PAGE_ID" \
+    -H "Authorization: Bearer $NOTION_API_KEY" \
+    -H "Notion-Version: 2022-06-28" \
+  | jq '{id: .id, title: .properties.Name.title[0].text.content, url: .url}'
+}
 
-## Property Types
-
-Common property formats for database items:
-
-- **Title:** `{"title": [{"text": {"content": "..."}}]}`
-- **Rich text:** `{"rich_text": [{"text": {"content": "..."}}]}`
-- **Select:** `{"select": {"name": "Option"}}`
-- **Multi-select:** `{"multi_select": [{"name": "A"}, {"name": "B"}]}`
-- **Date:** `{"date": {"start": "2024-01-15", "end": "2024-01-16"}}`
-- **Checkbox:** `{"checkbox": true}`
-- **Number:** `{"number": 42}`
-- **URL:** `{"url": "https://..."}`
-- **Email:** `{"email": "a@b.com"}`
-
-## Examples
-
-**Create a task:**
-
-```bash
-{baseDir}/notion.sh create-page \
-  --database=<database_id> \
-  --title="Review PR" \
-  --properties='{"Priority":{"select":{"name":"High"}},"Status":{"select":{"name":"Todo"}}}'
-```
-
-**Query incomplete tasks:**
-
-```bash
-{baseDir}/notion.sh query <database_id> --filter='{"property":"Status","select":{"does_not_equal":"Done"}}'
-```
-
-**Add a todo block:**
-
-```bash
-{baseDir}/notion.sh add-blocks <page_id> --blocks='[{"type":"to_do","to_do":{"rich_text":[{"text":{"content":"Check this"}}],"checked":false}}]'
+# List database entries
+notion_db_list() {
+  DATABASE_ID=$1
+  curl -s "https://api.notion.com/v1/databases/$DATABASE_ID/query" \
+    -H "Authorization: Bearer $NOTION_API_KEY" \
+    -H "Notion-Version: 2022-06-28" \
+    -X POST \
+  | jq '.results[] | {id: .id, title: .properties.Name.title[0].text.content}'
+}
 ```
 
 ## Notes
 
-- Page/database IDs are UUIDs (with or without dashes)
-- The API cannot set database view filters — that's UI-only
-- Rate limit: ~3 requests/second average
-- Use `--help` for full command reference
+- Notion API rate limits: 3 requests per second
+- Use `jq` to parse JSON responses
+- Page content comes as blocks - may need recursive fetching for long pages
+- Block IDs are different from Page IDs
+- Properties can be filtered with `filter` parameter in queries

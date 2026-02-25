@@ -1,97 +1,137 @@
 ---
 name: url-tools
-description: "URL shortening and expansion tools. Create short URLs, expand shortened URLs to see destination, validate URLs. No API key required for basic functionality."
+description: "URL manipulation and HTTP operations. Use when: user needs to encode/decode URLs, check HTTP headers, test APIs, or perform advanced curl operations."
 ---
 
 # URL Tools Skill
 
-Shorten and expand URLs using various services.
+URL manipulation and HTTP request tools.
 
 ## When to Use
 
-✅ **USE this skill when:**
+- Encode or decode URL components
+- Check HTTP headers
+- Test API endpoints
+- Download files
+- Debug HTTP issues
 
-- "Shorten this URL"
-- "Expand this short link"
-- "What does this short URL redirect to?"
-- "Create a short link for..."
+## URL Encoding
 
-## When NOT to Use
-
-❌ **DON'T use this skill when:**
-
-- Downloading files from URLs → use curl/wget
-- Parsing URL components → use programming tools
-- Web scraping → use browser-tools
-
-## Commands
-
-### Shorten URL
-
+### Encode URL
 ```bash
-{baseDir}/shorten.sh "https://example.com/very/long/url/here"
-{baseDir}/shorten.sh "https://example.com" --service=isgd
+# Encode a string for URL use
+python3 -c "import urllib.parse; print(urllib.parse.quote('hello world'))"
+# Output: hello%20world
 ```
 
-### Expand URL
-
+### Decode URL
 ```bash
-{baseDir}/expand.sh "https://is.gd/abc123"
-{baseDir}/expand.sh "https://bit.ly/example"
+# Decode URL-encoded string
+python3 -c "import urllib.parse; print(urllib.parse.unquote('hello%20world'))"
+# Output: hello world
 ```
 
-### Validate URL
+## HTTP Operations
 
+### Check Headers
 ```bash
-{baseDir}/validate.sh "https://example.com"
-{baseDir}/validate.sh "not-a-url"
+# Get response headers
+curl -I https://example.com
+
+# Get specific header
+curl -sI https://example.com | grep -i content-type
 ```
 
-### Parse URL
-
+### Test API
 ```bash
-{baseDir}/parse.sh "https://user:pass@example.com:8080/path?q=1#frag"
+# GET request
+curl -s https://api.example.com/data
+
+# POST request
+curl -s -X POST https://api.example.com/data \
+  -H "Content-Type: application/json" \
+  -d '{"key":"value"}'
+
+# With authentication
+curl -s https://api.example.com/protected \
+  -H "Authorization: Bearer TOKEN"
 ```
 
-## URL Shortening Services
+### Download File
+```bash
+# Download with progress
+curl -L -O https://example.com/file.zip
 
-| Service | Notes |
-|---------|-------|
-| is.gd | Free, no API key |
-| v.gd | Free, customizable slug |
-| tinyurl | Free |
-| cleanuri | Free |
-
-## Output Format
-
-### Shorten
-```
-Original: https://example.com/very/long/url
-Short: https://is.gd/abc123
+# Resume download
+curl -L -C - -O https://example.com/large-file.zip
 ```
 
-### Expand
-```
-Short URL: https://is.gd/abc123
-Destination: https://example.com/very/long/url
-Status: 301 Redirect
+### Debug Request
+```bash
+# Verbose output
+curl -v https://example.com
+
+# Show only headers
+curl -sI https://example.com
+
+# Timing
+curl -w "@/dev/stdin" -s -o /dev/null https://example.com <<'EOF'
+time_namelookup:  %{time_namelookup}
+time_connect:     %{time_connect}
+time_starttransfer: %{time_starttransfer}
+time_total:       %{time_total}
+EOF
 ```
 
-### Parse
-```
-Scheme: https
-Host: example.com
-Port: 8080
-Path: /path
-Query: q=1
-Fragment: frag
-User: user
-Password: pass
+## URL Parsing
+
+### Extract Parts
+```bash
+# Using Python
+python3 -c "
+from urllib.parse import urlparse
+url = 'https://user:pass@example.com:8080/path?query=value#frag'
+p = urlparse(url)
+print(f'scheme: {p.scheme}')
+print(f'netloc: {p.netloc}')
+print(f'host: {p.hostname}')
+print(f'port: {p.port}')
+print(f'path: {p.path}')
+print(f'query: {p.query}')
+"
 ```
 
-## Notes
+## Common curl Flags
 
-- is.gd and v.gd are free services with no API key required
-- Some services may have rate limits
-- URL expansion follows redirects to find final destination
-- For custom URL shortening with analytics, use paid services
+| Flag | Description |
+|------|-------------|
+| `-s` | Silent/quiet |
+| `-S` | Show errors |
+| `-v` | Verbose |
+| `-I` | Headers only |
+| `-L` | Follow redirects |
+| `-O` | Output to file |
+| `-X` | HTTP method |
+| `-H` | Add header |
+| `-d` | POST data |
+| `-b` | Cookies |
+| `-c` | Cookie jar |
+
+## Examples
+
+**Check if site is up:**
+```bash
+curl -s -o /dev/null -w "%{http_code}" https://example.com
+```
+
+**Get JSON and format:**
+```bash
+curl -s https://api.example.com/data | python3 -m json.tool
+```
+
+**Test webhook:**
+```bash
+curl -s -X POST https://webhook.example.com/hook \
+  -H "Content-Type: application/json" \
+  -d '{"event":"test","timestamp":"'"$(date -Iseconds)"'"}'
+```

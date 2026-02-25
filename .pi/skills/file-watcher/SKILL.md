@@ -1,107 +1,181 @@
 ---
 name: file-watcher
-description: Monitor files and directories for changes using chokidar. Use when you need to react to file modifications, watch for new uploads, or trigger actions on file events.
+description: "Watch files and directories for changes. Execute commands on change. Support for create, modify, delete events. No API key required."
 ---
 
-# File Watcher
+# File Watcher Skill
 
-Monitor files and directories for changes and trigger actions when modifications occur.
+Monitor files and directories for changes and trigger actions when changes occur.
 
-## Quick Start
+## When to Use
 
-```bash
-/job/.pi/skills/file-watcher/watch.js /path/to/watch
-```
+✅ **USE this skill when:**
 
-## Usage
+- "Watch for file changes"
+- "Run command when file changes"
+- "Monitor directory for new files"
+- "Execute script on file create"
+- "Watch multiple files for changes"
+
+## When NOT to Use
+
+❌ **DON'T use this skill when:**
+
+- One-time file check → use test/read commands
+- Scheduled monitoring → use cron
+- Need persistent logging → use dedicated monitoring
+
+## Commands
 
 ### Watch Directory
+
 ```bash
-/job/.pi/skills/file-watcher/watch.js <path>
+{baseDir}/watch.sh <directory> --command "echo 'Changed'"
+{baseDir}/watch.sh ./src --command "npm run build"
+{baseDir}/watch.sh ./logs --command "./process.sh" --pattern "*.log"
 ```
 
-### Watch with Pattern
+### Watch Single File
+
 ```bash
-/job/.pi/skills/file-watcher/watch.js <path> --pattern "*.md"
+{baseDir}/watch.sh --file config.json --command "echo 'Config changed'"
+{baseDir}/watch.sh --file /var/log/app.log --command "tail -5 /var/log/app.log"
 ```
 
-### Watch with Command
+### Watch Multiple Files
+
 ```bash
-/job/.pi/skills/file-watcher/watch.js <path> --on-change "echo 'File changed'"
+{baseDir}/watch.sh --files "file1.txt,file2.txt,file3.txt" --command "echo 'Changed'"
+{baseDir}/watch.sh --files-from list.txt --command "echo 'Changed'"
 ```
 
-### One-Shot Mode (exit after first change)
+### Event Types
+
 ```bash
-/job/.pi/skills/file-watcher/watch.js <path> --once
+{baseDir}/watch.sh ./src --command "make" --events create,modify,delete
+{baseDir}/watch.sh ./src --command "make" --events create
+{baseDir}/watch.sh ./src --command "make" --events modify
+```
+
+### Background Mode
+
+```bash
+{baseDir}/watch.sh ./src --command "make" --daemon
+{baseDir}/watch.sh ./src --command "make" --pidfile /tmp/watcher.pid
+```
+
+### Debounce
+
+```bash
+{baseDir}/watch.sh ./src --command "npm run build" --debounce 2
+{baseDir}/watch.sh ./src --command "npm run build" --debounce-file
 ```
 
 ## Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--pattern` | * | Glob pattern to filter files |
-| `--ignore` | node_modules,... | Paths to ignore |
-| `--recursive` | true | Watch subdirectories |
-| `--once` | false | Exit after first change |
-| `--on-change` | null | Command to run on change |
-| `--on-add` | null | Command to run on file add |
-| `--on-unlink` | null | Command to run on file delete |
-| `--timeout` | 100 | Timeout for batch changes (ms) |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--command CMD` | Command to run on change | Required |
+| `--file FILE` | Watch single file | None |
+| `--files "F1,F2,..."` | Watch multiple files | None |
+| `--files-from FILE` | Read file list from file | None |
+| `--pattern GLOB` | File pattern to match | `*` |
+| `--events TYPES` | Events: create,modify,delete | all |
+| `--recursive` | Watch subdirectories | true |
+| `--no-recursive` | Don't recurse | false |
+| `--debounce SECS` | Debounce time | 0 |
+| `--debounce-file` | Debounce per file | false |
+| `--daemon` | Run in background | false |
+| `--pidfile FILE` | PID file for daemon | None |
+| `--timeout SECS` | Stop after N seconds | None |
+| `--quiet` | Suppress output | false |
+| `--verbose` | Show all events | false |
 
-## Events Monitored
+## Events
 
-- **add**: File created
-- **change**: File modified
-- **unlink**: File deleted
-- **addDir**: Directory created
-- **unlinkDir**: Directory deleted
+| Event | Description |
+|-------|-------------|
+| `create` | File or directory created |
+| `modify` | File content modified |
+| `delete` | File or directory deleted |
+| `move` | File moved (renamed) |
+| `access` | File accessed (read) |
+| `attrib` | File attributes changed |
 
 ## Output Format
 
-Each event outputs JSON:
+```
+[2026-02-25 20:41:00] MODIFY /path/to/file.txt
+Running: echo 'Changed'
+...
+[2026-02-25 20:41:01] CREATE /path/to/newfile.txt
+Running: echo 'Changed'
+...
+```
+
+With `--json`:
 ```json
-{
-  "event": "change",
-  "path": "/path/to/file.txt",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "stats": {
-    "size": 1234,
-    "mtime": "2024-01-15T10:30:00.000Z"
-  }
-}
+{"event": "MODIFY", "file": "/path/to/file.txt", "timestamp": "2026-02-25T20:41:00Z", "command_output": "..."}
 ```
 
 ## Examples
 
+**Watch and rebuild:**
 ```bash
-# Watch markdown files
-/job/.pi/skills/file-watcher/watch.js ./docs --pattern "*.md"
-
-# Watch and run build command
-/job/.pi/skills/file-watcher/watch.js ./src --on-change "npm run build"
-
-# Watch once and exit
-/job/.pi/skills/file-watcher/watch.js /tmp/uploads --once
-
-# Watch for new JSON files
-/job/.pi/skills/file-watcher/watch.js ./data --pattern "*.json" --on-add "./process-new-file.sh"
-
-# Ignore node_modules
-/job/.pi/skills/file-watcher/watch.js ./project --ignore "**/node_modules/**"
+{baseDir}/watch.sh ./src --command "npm run build" --debounce 1
 ```
 
-## Use Cases
+**Watch for new log files:**
+```bash
+{baseDir}/watch.sh ./logs --command "./new-log.sh" --events create
+```
 
-- Auto-rebuild on source file changes
-- Process uploaded files automatically
-- Sync directories when files change
-- Trigger notifications on important file updates
-- Monitor log files for errors
+**Watch config and restart:**
+```bash
+{baseDir}/watch.sh --file config.json --command "pm2 restart app"
+```
 
-## When to Use
+**Watch multiple files:**
+```bash
+{baseDir}/watch.sh --files "config.json,.env,package.json" --command "npm run build"
+```
 
-- Need to react to file system changes
-- Automated build/workflow triggers
-- Monitoring upload directories
-- File synchronization tasks
-- Change detection and alerting
+**Watch in background:**
+```bash
+{baseDir}/watch.sh ./src --command "make" --daemon --pidfile /tmp/watcher.pid
+```
+
+**Watch for deleted files:**
+```bash
+{baseDir}/watch.sh ./uploads --command "echo 'File deleted'" --events delete
+```
+
+## Debouncing
+
+The `--debounce` option prevents rapid-fire commands:
+
+- `--debounce N`: Wait N seconds after the last event before running the command
+- `--debounce-file`: Track debounce per file independently
+
+```bash
+# Wait 2 seconds after last change
+{baseDir}/watch.sh ./src --command "build.sh" --debounce 2
+
+# Debounce per file (each file gets its own timer)
+{baseDir}/watch.sh ./src --command "process.sh" --debounce-file --debounce 1
+```
+
+## Notes
+
+- Uses inotifywait (Linux) or fswatch (macOS) when available
+- Falls back to polling on systems without native support
+- Command receives `$FILE` and `$EVENT` environment variables
+- Recursive by default for directories
+- Can watch thousands of files efficiently
+- Clean shutdown with SIGTERM or SIGINT
+
+## Dependencies
+
+- Linux: `inotifywait` (inotify-tools package)
+- macOS: `fswatch` (brew install fswatch)
+- Both: Polling fallback with 1-second interval

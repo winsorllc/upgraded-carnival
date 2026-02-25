@@ -1,97 +1,212 @@
 ---
 name: json-tools
-description: Parse, validate, format, and transform JSON data. Query with paths, merge objects, convert formats. Use when working with JSON APIs or configuration files.
+description: "JSON manipulation and processing. Use when: user needs to parse, validate, transform, query, or format JSON data."
 ---
 
-# JSON Tools
+# JSON Tools Skill
 
-Process and transform JSON data with various operations.
-
-## Quick Start
-
-```bash
-/job/.pi/skills/json-tools/json.js validate data.json
-```
-
-## Usage
-
-### Validate JSON
-```bash
-/job/.pi/skills/json-tools/json.js validate <file.json>
-```
-
-### Format/Pretty Print
-```bash
-/job/.pi/skills/json-tools/json.js format <file.json>
-```
-
-### Query with Path
-```bash
-/job/.pi/skills/json-tools/json.js query <file.json> "data.users[0].name"
-```
-
-### Extract Keys
-```bash
-/job/.pi/skills/json-tools/json.js keys <file.json>
-```
-
-### Merge JSON Files
-```bash
-/job/.pi/skills/json-tools/json.js merge file1.json file2.json
-```
-
-### Convert to CSV
-```bash
-/job/.pi/skills/json-tools/json.js tocsv <file.json>
-```
-
-### Convert CSV to JSON
-```bash
-/job/.pi/skills/json-tools/json.js tojson <file.csv>
-```
-
-### Filter Array
-```bash
-/job/.pi/skills/json-tools/json.js filter <file.json> "age > 18"
-```
-
-## Path Syntax
-
-- `key` - Access object property
-- `key.subkey` - Nested property
-- `array[0]` - Array index
-- `array[*]` - All array elements
-- `array[?(@.age>18)]` - Filter (where supported)
-
-## Examples
-
-```bash
-# Validate JSON syntax
-/job/.pi/skills/json-tools/json.js validate config.json
-
-# Pretty print with 2-space indent
-/job/.pi/skills/json-tools/json.js format data.json
-
-# Query specific value
-/job/.pi/skills/json-tools/json.js query api-response.json "data.user.profile.name"
-
-# Get all top-level keys
-/job/.pi/skills/json-tools/json.js keys package.json
-
-# Merge two configuration files (deep merge)
-/job/.pi/skills/json-tools/json.js merge base.json override.json
-
-# Convert array of objects to CSV
-/job/.pi/skills/json-tools/json.js tocsv users.json
-
-# Filter array by condition
-/job/.pi/skills/json-tools/json.js filter products.json "price < 100"
-```
+JSON manipulation and processing tools.
 
 ## When to Use
 
-- Validating JSON from APIs
-- Querying large JSON responses
-- Converting between JSON and CSV
-- Merging configuration files
-- Extracting specific data from JSON
+- Parse and validate JSON
+- Extract data from JSON
+- Transform JSON structure
+- Pretty print or minify JSON
+- Query JSON with jq
+
+## Validate JSON
+
+### Check if Valid JSON
+```bash
+# Using Python
+python3 -c "import json, sys; json.load(sys.stdin)" < file.json
+
+# Using jq
+jq . file.json >/dev/null 2>&1 && echo "Valid" || echo "Invalid"
+
+# Using node
+node -e "JSON.parse(require('fs').readFileSync(0,'utf8'))" < file.json
+```
+
+## Pretty Print
+
+### Format JSON
+```bash
+# Python pretty print
+python3 -m json.tool data.json
+
+# jq pretty print
+cat data.json | jq .
+
+# Node pretty print
+node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync(0,'utf8')), null, 2))" < data.json
+```
+
+### Minify JSON
+```bash
+# Minify (remove whitespace)
+cat data.json | jq -c .
+
+# Python minify
+python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)))" < data.json
+```
+
+## Extract Data
+
+### Get Keys
+```bash
+# Top-level keys
+cat data.json | jq 'keys'
+
+# Nested keys
+cat data.json | jq '.user | keys'
+```
+
+### Get Values
+```bash
+# Get specific field
+cat data.json | jq '.name'
+
+# Get nested field
+cat data.json | jq '.user.address.city'
+
+# Get array elements
+cat data.json | jq '.items[0]'
+
+# Get all array items
+cat data.json | jq '.items[]'
+```
+
+### Filter Arrays
+```bash
+# Filter by value
+cat data.json | jq '.items[] | select(.price > 100)'
+
+# Map to specific field
+cat data.json | jq '.items[] | .name'
+
+# Count items
+cat data.json | jq '.items | length'
+```
+
+## Transform JSON
+
+### Rename Keys
+```bash
+# Rename 'name' to 'title'
+cat data.json | jq '. + {title: .name} | del(.name)'
+```
+
+### Add/Remove Fields
+```bash
+# Add field
+cat data.json | jq '. + {newField: "value"}'
+
+# Remove field
+cat data.json | jq 'del(.unwantedField)'
+
+# Update field
+cat data.json | jq '.count += 1'
+```
+
+### Merge Objects
+```bash
+# Merge two objects
+echo '{}' | jq -s '.[0] * .[1]' file1.json file2.json
+```
+
+## Convert Formats
+
+### JSON to CSV
+```bash
+# Simple JSON array to CSV
+cat data.json | jq -r '.[] | [.name, .email, .age] | @csv'
+
+# With header
+echo "name,email,age" > output.csv
+cat data.json | jq -r '.[] | [.name, .email, .age] | @csv' >> output.csv
+```
+
+### CSV to JSON
+```bash
+# Using Python
+python3 -c "
+import csv, json, sys
+reader = csv.DictReader(sys.stdin)
+print(json.dumps(list(reader), indent=2))
+" < data.csv
+
+# Using jq (if dealing with array)
+cat data.json | jq -c '.[]' | csvjson -d
+```
+
+### JSON to YAML
+```bash
+# Using Python
+python3 -c "
+import json, yaml, sys
+print(yaml.dump(json.load(sys.stdin)))
+" < data.json
+
+# Using yq
+cat data.json | yq -y .
+```
+
+## Query Examples
+
+### API Response Parsing
+```bash
+# Get array of IDs
+curl -s api.example.com/data | jq '.[].id'
+
+# Filter by status
+curl -s api.example.com/data | jq '.[] | select(.status == "active")'
+
+# Group by field
+curl -s api.example.com/data | jq 'group_by(.category)'
+```
+
+### Complex Queries
+```bash
+# Multiple fields
+cat data.json | jq '{name: .user.name, email: .user.email}'
+
+# Conditional
+cat data.json | jq 'if .active then "active" else "inactive" end'
+
+# Default values
+cat data.json | jq '.name // "Unknown"'
+```
+
+## Useful jq Flags
+
+| Flag | Description |
+|------|-------------|
+| `-r` | Raw output (no quotes) |
+| `-c` | Compact output |
+| `-M` | Monochrome |
+| `-f` | Read filter from file |
+| `-s` | Slurp (read all input) |
+
+## Examples
+
+**Count items:**
+```bash
+cat data.json | jq '.items | length'
+```
+
+**Extract unique values:**
+```bash
+cat data.json | jq '[.items[].category] | unique'
+```
+
+**Sum values:**
+```bash
+cat data.json | jq '[.items[].price] | add'
+```
+
+**Convert to lines:**
+```bash
+cat data.json | jq -c '.items[]'
+```

@@ -1,13 +1,21 @@
 ---
 name: weather
-description: Get current weather and forecasts via wttr.in. Use when user asks about weather, temperature, or forecasts for any location. No API key needed.
+description: "Get current weather and forecasts via wttr.in or Open-Meteo. Use when: user asks about weather, temperature, or forecasts for any location. NOT for: historical weather data, severe weather alerts, or detailed meteorological analysis. No API key needed."
+metadata:
+  openclaw:
+    emoji: "🌤️"
+    requires:
+      bins:
+        - curl
 ---
 
 # Weather Skill
 
-Get current weather conditions and forecasts using wttr.in (free, no API key).
+Get current weather conditions and forecasts using wttr.in (no API key required).
 
 ## When to Use
+
+✅ **USE this skill when:**
 
 - "What's the weather?"
 - "Will it rain today/tomorrow?"
@@ -15,9 +23,17 @@ Get current weather conditions and forecasts using wttr.in (free, no API key).
 - "Weather forecast for the week"
 - Travel planning weather checks
 
-## Location Format
+❌ **DON'T use this skill when:**
 
-Include a city name, region, or airport code. Use `+` or `%20` for spaces.
+- Historical weather data → use weather archives/APIs
+- Climate analysis or trends → use specialized data sources
+- Hyper-local microclimate data → use local sensors
+- Severe weather alerts → check official NWS sources
+- Aviation/marine weather → use specialized services (METAR, etc.)
+
+## Location
+
+Always include a city, region, or airport code in weather queries.
 
 ## Commands
 
@@ -42,16 +58,22 @@ curl -s "wttr.in/London"
 
 # Week forecast
 curl -s "wttr.in/London?format=v2"
+
+# Specific day (0=today, 1=tomorrow, 2=day after)
+curl -s "wttr.in/London?1"
 ```
 
 ### Format Options
 
 ```bash
-# One-liner with custom format
+# One-liner
 curl -s "wttr.in/London?format=%l:+%c+%t+%w"
 
 # JSON output
 curl -s "wttr.in/London?format=j1"
+
+# PNG image
+curl -s "wttr.in/London.png" -o weather.png
 ```
 
 ### Format Codes
@@ -64,19 +86,22 @@ curl -s "wttr.in/London?format=j1"
 - `%p` — Precipitation
 - `%l` — Location
 
-## Quick Examples
+## Quick Responses
 
-**Get quick summary:**
+**"What's the weather?"**
+
 ```bash
 curl -s "wttr.in/London?format=%l:+%c+%t+(feels+like+%f),+%w+wind,+%h+humidity"
 ```
 
-**Check if rain:**
+**"Will it rain?"**
+
 ```bash
 curl -s "wttr.in/London?format=%l:+%c+%p"
 ```
 
-**Week forecast:**
+**"Weekend forecast"**
+
 ```bash
 curl -s "wttr.in/London?format=v2"
 ```
@@ -87,3 +112,4 @@ curl -s "wttr.in/London?format=v2"
 - Rate limited; don't spam requests
 - Works for most global cities
 - Supports airport codes: `curl wttr.in/ORD`
+- Use `-s` (silent) flag to avoid progress bars
