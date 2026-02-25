@@ -1,0 +1,10 @@
+{
+  "name": "json-validator",
+  "version": "1.0.0",
+  "description": "JSON validation and formatting tool",
+  "type": "module",
+  "bin": {
+    "validate": "./validate.js"
+  },
+  "dependencies": {}
+}

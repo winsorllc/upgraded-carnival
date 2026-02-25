@@ -1,0 +1,10 @@
+{
+  "name": "code-reviewer",
+  "version": "1.0.0",
+  "description": "Automated code review tool",
+  "type": "module",
+  "bin": {
+    "review": "./review.js"
+  },
+  "dependencies": {}
+}
