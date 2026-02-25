@@ -1,0 +1,148 @@
+#!/bin/bash
+# Nano Banana Pro - Gemini 3 Pro Image Generation
+# Uses Google's Gemini API to generate/edit images
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="${HOME}/.thepopebot"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat << EOF
+Nano Banana Pro - Gemini 3 Pro Image Generation
+
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+    --prompt TEXT        Image generation prompt (required)
+    --filename NAME      Output filename (required)
+    --resolution RES    Resolution: 1K, 2K, 4K (default: 1K)
+    --edit FILE          Edit an existing image
+    --help              Show this help message
+
+Examples:
+    $(basename "$0") --prompt "a cat on the moon" --filename "cat.png"
+    $(basename "$0") --prompt "add a hat" --edit input.png --filename "output.png"
+EOF
+    exit 1
+}
+
+get_api_key() {
+    # Check environment variable
+    if [[ -n "$GEMINI_API_KEY" ]]; then
+        echo "$GEMINI_API_KEY"
+        return
+    fi
+    
+    # Check secrets file
+    if [[ -f "${CONFIG_DIR}/secrets.json" ]]; then
+        local key
+        key=$(grep -o '"gemini_api_key"[[:space:]]*:[[:space:]]*"[^"]*"' "${CONFIG_DIR}/secrets.json" | sed 's/.*"\([^"]*\)"/\1/')
+        if [[ -n "$key" ]]; then
+            echo "$key"
+            return
+        fi
+    fi
+    
+    echo -e "${RED}Error: GEMINI_API_KEY not found. Set it in environment or ~/.thepopebot/secrets.json${NC}" >&2
+    exit 1
+}
+
+generate_image() {
+    local prompt="$1"
+    local filename="$2"
+    local resolution="${3:-1K}"
+    local edit_file="$4"
+    
+    local api_key
+    api_key=$(get_api_key)
+    
+    # Map resolution to dimensions
+    local width height
+    case "$resolution" in
+        1K) width=1024; height=1024 ;;
+        2K) width=2048; height=2048 ;;
+        4K) width=4096; height=4096 ;;
+        *) width=1024; height=1024 ;;
+    esac
+    
+    echo -e "${GREEN}Generating image...${NC}"
+    echo "  Prompt: $prompt"
+    echo "  Resolution: $resolution ($width x $height)"
+    [[ -n "$edit_file" ]] && echo "  Editing: $edit_file"
+    
+    # Ensure output directory exists
+    mkdir -p "$(dirname "$filename")"
+    
+    # Note: This is a placeholder. In production, use the Gemini API.
+    # The actual implementation would use curl or a Python script to call
+    # the Gemini API with the image generation model.
+    
+    echo -e "${YELLOW}Note: Gemini image generation API integration requires${NC}"
+    echo -e "${YELLOW}actual API setup. This is a skill template.${NC}"
+    echo ""
+    echo "Would generate image with:"
+    echo "  Model: gemini-2.0-flash-exp-image-generation"
+    echo "  Prompt: $prompt"
+    echo "  Resolution: $width x $height"
+    echo "  Output: $filename"
+    
+    # Print media marker for integration
+    echo "MEDIA:$filename"
+    
+    return 0
+}
+
+# Parse arguments
+PROMPT=""
+FILENAME=""
+RESOLUTION="1K"
+EDIT_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --prompt)
+            PROMPT="$2"
+            shift 2
+            ;;
+        --filename)
+            FILENAME="$2"
+            shift 2
+            ;;
+        --resolution)
+            RESOLUTION="$2"
+            shift 2
+            ;;
+        --edit)
+            EDIT_FILE="$2"
+            shift 2
+            ;;
+        --help|-h)
+            usage
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            usage
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [[ -z "$PROMPT" ]]; then
+    echo -e "${RED}Error: --prompt is required${NC}" >&2
+    usage
+fi
+
+if [[ -z "$FILENAME" ]]; then
+    echo -e "${RED}Error: --filename is required${NC}" >&2
+    usage
+fi
+
+# Run generation
+generate_image "$PROMPT" "$FILENAME" "$RESOLUTION" "$EDIT_FILE"

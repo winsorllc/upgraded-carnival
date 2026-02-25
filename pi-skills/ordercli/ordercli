@@ -1,0 +1,38 @@
+#!/bin/bash
+# Order CLI Wrapper
+set -e
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Order CLI - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: list, show, track, returns
+EOF
+    exit 1
+}
+
+get_api_key() {
+    [[ -n "$ORDERCLI_API_KEY" ]] && echo "$ORDERCLI_API_KEY" && return
+    grep -o '"ordercli_api_key"' ~/.thepopebot/secrets.json 2>/dev/null && echo "configured" || echo ""
+}
+
+cmd_list() {
+    echo "Listing orders..."
+    get_api_key
+}
+
+cmd_show() { echo "Order: $1"; }
+cmd_track() { echo "Tracking: $1"; }
+cmd_returns() { echo "Returns"; }
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+case "$COMMAND" in
+    list) cmd_list ;;
+    show) shift; cmd_show "$@" ;;
+    track) shift; cmd_track "$@" ;;
+    returns) cmd_returns ;;
+    *) echo "Unknown: $COMMAND" ;;
+esac

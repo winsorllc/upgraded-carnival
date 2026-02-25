@@ -1,0 +1,340 @@
+#!/bin/bash
+# Trello CLI Wrapper
+# Manage Trello boards, lists, and cards
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${HOME}/.thepopebot/config.json"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Trello CLI - Manage boards, lists, and cards
+
+Usage: $(basename "$0") <command> [OPTIONS]
+
+Boards:
+    boards list                   List your boards
+    board create <name>           Create a new board
+    board show <id>              Show board details
+    board archive <id>           Archive a board
+
+Lists:
+    lists <board-id>              List lists on a board
+    list create <name> --board <board-id>  Create a list
+    list move <id> --position N   Reorder list
+
+Cards:
+    cards <list-id>               List cards in a list
+    card create <name> --list <list-id>  Create a card
+    card show <id>               Show card details
+    card move <id> --list <list-id>  Move card
+    card archive <id>            Archive a card
+    card due <id> --date <date>  Set due date
+
+Members:
+    member add <email> --board <board-id>
+    members <board-id>
+
+Actions:
+    action create <name> --list <list-id> --due <date>
+    action complete <card-id>
+
+Options:
+    --board ID      Board ID
+    --list ID       List ID
+    --position N    Position (0=top)
+    --date DATE     Due date (YYYY-MM-DD)
+    --json          JSON output
+
+Examples:
+    $(basename "$0") boards list
+    $(basename "$0") board create "My Project"
+    $(basename "$0") list create "To Do" --board board123
+    $(basename "$0") card create "New task" --list list456
+
+EOF
+    exit 1
+}
+
+get_config() {
+    local key="$1"
+    local default="${2:-}"
+    
+    # Check environment
+    local env_key="TRELLO_${key^^}"
+    env_key="${env_key//_/_}"  # API_KEY -> API_KEY
+    if [[ -n "${!env_key}" ]]; then
+        echo "${!env_key}"
+        return
+    fi
+    
+    # Check config file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        local value
+        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$CONFIG_FILE" 2>/dev/null | sed 's/.*"\([^"]*\)"/\1/')
+        if [[ -n "$value" ]]; then
+            echo "$value"
+            return
+        fi
+    fi
+    
+    echo "$default"
+}
+
+get_api_key() {
+    get_config "trello_api_key"
+}
+
+get_token() {
+    get_config "trello_token"
+}
+
+trello_api() {
+    local key token
+    key=$(get_api_key)
+    token=$(get_token)
+    
+    if [[ -z "$key" || -z "$token" ]]; then
+        echo -e "${RED}Error: TRELLO_API_KEY and TRELLO_TOKEN required${NC}" >&2
+        echo "" >&2
+        echo "Get keys from:" >&2
+        echo "  https://trello.com/app-key" >&2
+        exit 1
+    fi
+    
+    local method="${1:-GET}"
+    local endpoint="$2"
+    shift 2
+    local params=("key=$key" "token=$token")
+    
+    while [[ $# -gt 0 ]]; do
+        params+=("$1")
+        shift
+    done
+    
+    local url="https://api.trello.com/1/${endpoint}?${params[*]}"
+    
+    case "$method" in
+        GET) curl -s "$url" ;;
+        POST) curl -s -X POST "$url" ;;
+        PUT) curl -s -X PUT "$url" ;;
+        DELETE) curl -s -X DELETE "$url" ;;
+    esac
+}
+
+cmd_boards() {
+    local subcmd="${1:-list}"
+    case "$subcmd" in
+        list)
+            trello_api GET "members/me/boards" "fields=name,url,dateLastActivity" | \
+                jq -r '.[] | "\(.name) \(.url) \(.dateLastActivity)"'
+            ;;
+        *)
+            echo -e "${RED}Unknown boards command: $subcmd${NC}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+cmd_board() {
+    local subcmd="$1"
+    shift
+    
+    case "$subcmd" in
+        create)
+            local name="$1"
+            if [[ -z "$name" ]]; then
+                echo -e "${RED}Error: board name required${NC}" >&2
+                exit 1
+            fi
+            trello_api POST "boards" "name=$name" | jq '.'
+            ;;
+        show)
+            local id="$1"
+            trello_api GET "boards/$id" | jq '.'
+            ;;
+        archive)
+            local id="$1"
+            trello_api PUT "boards/$id" "closed=true" | jq '.'
+            ;;
+        *)
+            echo -e "${RED}Unknown board command: $subcmd${NC}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+cmd_lists() {
+    local board_id="$1"
+    if [[ -z "$board_id" ]]; then
+        echo -e "${RED}Error: board ID required${NC}" >&2
+        exit 1
+    fi
+    trello_api GET "boards/$board_id/lists" | jq -r '.[] | "\(.id) \(.name) \(.pos)"'
+}
+
+cmd_list() {
+    local subcmd="$1"
+    shift
+    
+    case "$subcmd" in
+        create)
+            local name=""
+            local board_id=""
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --board) board_id="$2"; shift 2 ;;
+                    *) name="$1"; shift ;;
+                esac
+            done
+            
+            if [[ -z "$name" || -z "$board_id" ]]; then
+                echo -e "${RED}Error: name and --board required${NC}" >&2
+                exit 1
+            fi
+            
+            trello_api POST "lists" "name=$name" "idBoard=$board_id" | jq '.'
+            ;;
+        move)
+            local id=""
+            local pos="0"
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --position) pos="$2"; shift 2 ;;
+                    *) id="$1"; shift ;;
+                esac
+            done
+            
+            trello_api PUT "lists/$id" "pos=$pos" | jq '.'
+            ;;
+        *)
+            echo -e "${RED}Unknown list command: $subcmd${NC}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+cmd_cards() {
+    local list_id="$1"
+    if [[ -z "$list_id" ]]; then
+        echo -e "${RED}Error: list ID required${NC}" >&2
+        exit 1
+    fi
+    trello_api GET "lists/$list_id/cards" | jq -r '.[] | "\(.idShort) \(.name)"'
+}
+
+cmd_card() {
+    local subcmd="$1"
+    shift
+    
+    case "$subcmd" in
+        create)
+            local name=""
+            local list_id=""
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --list) list_id="$2"; shift 2 ;;
+                    *) name="$1"; shift ;;
+                esac
+            done
+            
+            if [[ -z "$name" || -z "$list_id" ]]; then
+                echo -e "${RED}Error: name and --list required${NC}" >&2
+                exit 1
+            fi
+            
+            trello_api POST "cards" "name=$name" "idList=$list_id" | jq '.'
+            ;;
+        show)
+            local id="$1"
+            trello_api GET "cards/$id" | jq '.'
+            ;;
+        move)
+            local id=""
+            local list_id=""
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --list) list_id="$2"; shift 2 ;;
+                    *) id="$1"; shift ;;
+                esac
+            done
+            
+            trello_api PUT "cards/$id" "idList=$list_id" | jq '.'
+            ;;
+        archive)
+            local id="$1"
+            trello_api PUT "cards/$id" "closed=true" | jq '.'
+            ;;
+        due)
+            local id=""
+            local date=""
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --date) date="$2"; shift 2 ;;
+                    *) id="$1"; shift ;;
+                esac
+            done
+            
+            trello_api PUT "cards/$id" "due=$date" | jq '.'
+            ;;
+        *)
+            echo -e "${RED}Unknown card command: $subcmd${NC}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+cmd_member() {
+    local subcmd="$1"
+    shift
+    
+    case "$subcmd" in
+        add)
+            local email=""
+            local board_id=""
+            
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --board) board_id="$2"; shift 2 ;;
+                    *) email="$1"; shift ;;
+                esac
+            done
+            
+            if [[ -z "$email" || -z "$board_id" ]]; then
+                echo -e "${RED}Error: email and --board required${NC}" >&2
+                exit 1
+            fi
+            
+            # First, invite member
+            trello_api PUT "boards/$board_id" "members=$email" | jq '.'
+            ;;
+    esac
+}
+
+# Main
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    boards) shift; cmd_boards "$@" ;;
+    board) shift; cmd_board "$@" ;;
+    lists) shift; cmd_lists "$@" ;;
+    list) shift; cmd_list "$@" ;;
+    cards) shift; cmd_cards "$@" ;;
+    card) shift; cmd_card "$@" ;;
+    member) shift; cmd_member "$@" ;;
+    *) echo -e "${RED}Unknown command: $COMMAND${NC}" >&2; usage ;;
+esac

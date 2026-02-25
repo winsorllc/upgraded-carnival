@@ -1,0 +1,40 @@
+#!/bin/bash
+# Oracle CLI Wrapper
+set -e
+
+usage() {
+    cat << EOF
+Oracle CLI - Usage: $(basename "$0") [OPTIONS] <prompt>
+Options:
+  --engine browser|api   AI engine (default: browser)
+  --model NAME          Model name
+  --files GLOB          File patterns to include
+  --exclude GLOB        Files to exclude
+  --dry-run             Preview without executing
+  --files-report        Show file list and token count
+  --attach SESSION      Reattach to session
+  --sessions list       List sessions
+Examples:
+  $(basename "$0") "Explain auth system"
+  $(basename "$0") --files "src/*.js" "Find bug"
+  $(basename "$0") --dry-run "Question"
+EOF
+    exit 1
+}
+
+ORACLE=""
+if command -v oracle &> /dev/null; then
+    ORACLE="oracle"
+elif [[ -x "${HOME}/node_modules/.bin/oracle" ]]; then
+    ORACLE="${HOME}/node_modules/.bin/oracle"
+fi
+
+if [[ -z "$ORACLE" ]]; then
+    echo "Oracle not installed."
+    echo "Install: npm install -g @steipete/oracle"
+    echo "Or use: npx -y @steipete/oracle"
+    exit 1
+fi
+
+# Forward all arguments
+$ORACLE "$@"

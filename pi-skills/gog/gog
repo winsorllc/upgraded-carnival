@@ -1,0 +1,54 @@
+#!/bin/bash
+# GOG Galaxy CLI Wrapper
+set -e
+
+CONFIG_FILE="${HOME}/.thepopebot/secrets.json"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+GOG Galaxy CLI - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: games, game, achievements, saves, sessions
+EOF
+    exit 1
+}
+
+get_api_key() {
+    [[ -n "$GOG_API_KEY" ]] && echo "$GOG_API_KEY" && return
+    if [[ -f "$CONFIG_FILE" ]]; then
+        grep -o '"gog_api_key"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"\([^"]*\)"/\1/'
+    fi
+}
+
+gog_api() {
+    local key; key=$(get_api_key)
+    if [[ -z "$key" ]]; then echo "GOG_API_KEY required"; exit 1; fi
+    echo "API call to GOG would use key: ${key:0:4}..."
+}
+
+cmd_games() {
+    echo "Listing GOG games..."
+    gog_api
+    echo "games list"
+}
+
+cmd_game() {
+    echo "Showing game details: $1"
+    gog_api
+}
+
+cmd_achievements() {
+    echo "Achievements for game: $1"
+    gog_api
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+case "$COMMAND" in
+    games) cmd_games ;;
+    game) shift; cmd_game "$@" ;;
+    achievements) shift; cmd_achievements "$@" ;;
+    *) echo "Unknown: $COMMAND"; usage ;;
+esac

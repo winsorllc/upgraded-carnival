@@ -1,0 +1,154 @@
+#!/bin/bash
+# Things 3 CLI Wrapper
+# Manage tasks on macOS via Things app
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Things 3 CLI - Task management for macOS
+
+Usage: $(basename "$0") <command> [OPTIONS]
+
+Commands:
+    add <title>           Create a new todo
+    list                  List all todos
+    today                 Show today's tasks
+    upcoming              Show upcoming tasks
+    projects              List projects
+    add-project <name>    Create a project
+    tags                  List tags
+    show <id>            Show task details
+    move <id> <project>  Move task to project
+    done <id>            Mark task as completed
+    delete <id>          Delete a task
+
+Options:
+    --title, -t TEXT     Task title
+    --notes, -n TEXT     Notes
+    --project, -p NAME   Project name
+    --area, -a NAME     Area name
+    --due, -d DATE      Due date (today, tomorrow, next monday, etc.)
+    --when, -w WHEN     When (today, someday, evening)
+    --tag, -g TAGS      Tags (comma-separated)
+    --checklist, -c     Checklist items
+
+Examples:
+    $(basename "$0") add "Buy groceries"
+    $(basename "$0") add "Finish report" --project Work --due tomorrow
+    $(basename "$0") add "Call mom" --tag personal --due today
+    $(basename "$0") today
+    $(basename "$0") move abc123 "Work Project"
+
+EOF
+    exit 1
+}
+
+# Check for things CLI
+THINGS=""
+if command -v things &> /dev/null; then
+    THINGS="things"
+else
+    echo -e "${RED}Things CLI not found${NC}" >&2
+    echo "Things 3 must be installed on macOS" >&2
+    exit 1
+fi
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    add)
+        shift
+        TITLE=""
+        PROJECT=""
+        AREA=""
+        DUE=""
+        WHEN=""
+        TAGS=""
+        NOTES=""
+        
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -t|--title) TITLE="$2"; shift 2 ;;
+                -n|--notes) NOTES="$2"; shift 2 ;;
+                -p|--project) PROJECT="$2"; shift 2 ;;
+                -a|--area) AREA="$2"; shift 2 ;;
+                -d|--due) DUE="$2"; shift 2 ;;
+                -w|--when) WHEN="$2"; shift 2 ;;
+                -g|--tag) TAGS="$2"; shift 2 ;;
+                -*) shift ;;
+                *) TITLE="$1"; shift ;;
+            esac
+        done
+        
+        if [[ -z "$TITLE" ]]; then
+            echo -e "${RED}Error: title required${NC}" >&2
+            exit 1
+        fi
+        
+        ARGS=("$TITLE")
+        [[ -n "$PROJECT" ]] && ARGS+=("--project" "$PROJECT")
+        [[ -n "$AREA" ]] && ARGS+=("--area" "$AREA")
+        [[ -n "$DUE" ]] && ARGS+=("--due" "$DUE")
+        [[ -n "$WHEN" ]] && ARGS+=("--when" "$WHEN")
+        [[ -n "$TAGS" ]] && ARGS+=("--tag" "$TAGS")
+        [[ -n "$NOTES" ]] && ARGS+=("--notes" "$NOTES")
+        
+        $THINGS add "${ARGS[@]}"
+        ;;
+    list)
+        shift
+        $THINGS list "$@"
+        ;;
+    today)
+        shift
+        $THINGS list --today "$@"
+        ;;
+    upcoming)
+        shift
+        $THINGS list --upcoming "$@"
+        ;;
+    projects)
+        $THINGS projects
+        ;;
+    add-project)
+        shift
+        $THINGS add-project "$@"
+        ;;
+    tags)
+        $THINGS tags
+        ;;
+    show)
+        shift
+        $THINGS show "$@"
+        ;;
+    move)
+        shift
+        ID="$1"
+        PROJECT="$2"
+        if [[ -z "$ID" || -z "$PROJECT" ]]; then
+            echo -e "${RED}Error: ID and project required${NC}" >&2
+            exit 1
+        fi
+        $THINGS move "$ID" --project "$PROJECT"
+        ;;
+    done|complete)
+        shift
+        $THINGS done "$@"
+        ;;
+    delete|remove)
+        shift
+        $THINGS delete "$@"
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}" >&2
+        usage
+        ;;
+esac

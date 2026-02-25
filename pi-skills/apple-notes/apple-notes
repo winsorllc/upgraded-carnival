@@ -1,0 +1,89 @@
+#!/bin/bash
+# Apple Notes CLI via AppleScript
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Apple Notes CLI - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: accounts, folders, list, read, create, delete, search
+Examples: 
+  $(basename "$0") list
+  $(basename "$0") create --title "My Note" --body "Content"
+  $(basename "$0") search "keyword"
+EOF
+    exit 1
+}
+
+run_applescript() {
+    osascript -e "$1" 2>/dev/null || echo ""
+}
+
+cmd_accounts() {
+    run_applescript 'tell application "Notes" to get name of accounts'
+}
+
+cmd_folders() {
+    run_applescript 'tell application "Notes" to get name of folders'
+}
+
+cmd_list() {
+    run_applescript 'tell application "Notes" to get name of notes'
+}
+
+cmd_read() {
+    local title="$1"
+    if [[ -z "$title" ]]; then usage; fi
+    run_applescript "tell application \"Notes\" to get body of note \"$title\""
+}
+
+cmd_create() {
+    local title=""
+    local body=""
+    local folder="Notes"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --title) title="$2"; shift 2 ;;
+            --body) body="$2"; shift 2 ;;
+            --folder) folder="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [[ -z "$title" ]]; then echo "Title required"; exit 1; fi
+    if [[ -z "$body" ]]; then body=""; fi
+    
+    run_applescript "tell application \"Notes\" to tell account \"iCloud\" to make new note at folder \"$folder\" with properties {name:\"$title\", body:\"$body\"}"
+    echo "Created: $title"
+}
+
+cmd_delete() {
+    local title="$1"
+    if [[ -z "$title" ]]; then usage; fi
+    run_applescript "tell application \"Notes\" to delete note \"$title\""
+    echo "Deleted: $title"
+}
+
+cmd_search() {
+    local query="$1"
+    if [[ -z "$query" ]]; then usage; fi
+    run_applescript "tell application \"Notes\" to get name of notes whose body contains \"$query\""
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    accounts) cmd_accounts ;;
+    folders) cmd_folders ;;
+    list) cmd_list ;;
+    read) shift; cmd_read "$@" ;;
+    create) shift; cmd_create "$@" ;;
+    delete) shift; cmd_delete "$@" ;;
+    search) shift; cmd_search "$@" ;;
+    *) echo "Unknown: $COMMAND"; usage ;;
+esac

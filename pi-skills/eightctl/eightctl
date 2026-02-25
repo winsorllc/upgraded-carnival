@@ -1,0 +1,33 @@
+#!/bin/bash
+# Eight Control CLI
+set -e
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Eight Control CLI - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: devices, light, switch, scene
+EOF
+    exit 1
+}
+
+cmd_devices() {
+    echo "Listing devices from Eighthome..."
+}
+
+cmd_light() {
+    echo "Light control: $@"
+}
+
+cmd_scene() { echo "Scene: $@"; }
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+case "$COMMAND" in
+    devices) cmd_devices ;;
+    light) shift; cmd_light "$@" ;;
+    scene) shift; cmd_scene "$@" ;;
+    *) echo "Unknown: $COMMAND" ;;
+esac

@@ -1,0 +1,165 @@
+#!/bin/bash
+# Skill Creator - Generate new skills from templates
+set -e
+
+SKILLS_DIR="/job/pi-skills"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Skill Creator - Generate new PopeBot skills
+
+Usage: $(basename "$0") <command> [OPTIONS]
+
+Commands:
+    create <name>          Create new skill
+    list                   List available templates
+    templates              Show template options
+
+Options:
+    --template TYPE        Template: default, api, cli, webhook
+    --description TEXT    Skill description
+
+Examples:
+    $(basename "$0") create my-skill
+    $(basename "$0") create api-integration --template api --description "API for weather"
+    $(basename "$0") list
+
+EOF
+    exit 1
+}
+
+TEMPLATE_DEFAULT='---'
+TEMPLATE_DEFAULT="$TEMPLATE_DEFAULT"
+TEMPLATE_DEFAULT="${TEMPLATE_DEFAULT}
+name: NAME
+description: DESCRIPTION
+metadata:
+  {
+    \"openclaw\": {
+      \"emoji\": \"📦\"
+    }
+  }
+---
+
+# SKILL NAME
+
+Instructions for using this skill.
+
+## Prerequisites
+
+List any required API keys, binaries, or configuration.
+
+## Usage
+
+Describe how to use this skill.
+
+## Examples
+
+```bash
+skill command --arg value
+```
+"
+
+create_default() {
+    local name="$1"
+    local description="${2:-A new skill}"
+    
+    if [[ -z "$name" ]]; then
+        echo -e "${RED}Error: skill name required${NC}" >&2
+        exit 1
+    fi
+    
+    local skill_dir="${SKILLS_DIR}/${name}"
+    
+    if [[ -d "$skill_dir" ]]; then
+        echo -e "${RED}Skill already exists: $name${NC}" >&2
+        exit 1
+    fi
+    
+    mkdir -p "$skill_dir"
+    
+    # Create SKILL.md
+    local skill_md="${TEMPLATE_DEFAULT//NAME/$name}"
+    skill_md="${skill_md//DESCRIPTION/$description}"
+    skill_md="${skill_md//SKILL NAME/${name^}}"
+    
+    echo "$skill_md" > "${skill_dir}/SKILL.md"
+    
+    # Create implementation script
+    cat > "${skill_dir}/${name}" << 'SCRIPT'
+#!/bin/bash
+# SKILL implementation
+set -e
+echo "Skill: NAME"
+echo "Implement your skill logic here"
+SCRIPT
+    sed -i "s/NAME/$name/g" "${skill_dir}/${name}"
+    
+    chmod +x "${skill_dir}/${name}"
+    
+    echo -e "${GREEN}Created skill: $name${NC}"
+    echo "  ${skill_dir}/SKILL.md"
+    echo "  ${skill_dir}/${name}"
+}
+
+cmd_create() {
+    local name=""
+    local template="default"
+    local description=""
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --template|-t) template="$2"; shift 2 ;;
+            --description|-d) description="$2"; shift 2 ;;
+            *) name="$1"; shift ;;
+        esac
+    done
+    
+    if [[ -z "$name" ]]; then
+        echo -e "${RED}Error: skill name required${NC}" >&2
+        exit 1
+    fi
+    
+    if [[ -z "$description" ]]; then
+        description="A new PopeBot skill"
+    fi
+    
+    case "$template" in
+        default)
+            create_default "$name" "$description"
+            ;;
+        api|cli|webhook)
+            echo -e "${YELLOW}Template '$template' not fully implemented${NC}"
+            create_default "$name" "$description"
+            ;;
+        *)
+            echo -e "${RED}Unknown template: $template${NC}" >&2
+            exit 1
+            ;;
+    esac
+}
+
+cmd_list() {
+    echo "Available templates:"
+    echo "  default   - Basic skill structure"
+    echo "  api       - API-based integration"
+    echo "  cli       - CLI wrapper"
+    echo "  webhook   - Webhook handler"
+    echo ""
+    echo "Existing skills:"
+    ls -1 "$SKILLS_DIR" 2>/dev/null | head -10 || echo "  (none)"
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    create) shift; cmd_create "$@" ;;
+    list|templates) cmd_list ;;
+    *) echo "Unknown: $COMMAND"; usage ;;
+esac

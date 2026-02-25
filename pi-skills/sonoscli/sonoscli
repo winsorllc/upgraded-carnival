@@ -1,0 +1,161 @@
+#!/bin/bash
+# Sonos CLI Wrapper
+# Control Sonos speakers from the command line
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Sonos CLI - Control your Sonos speakers
+
+Usage: $(basename "$0") <command> [OPTIONS]
+
+Playback:
+    play              Start playback
+    pause             Pause playback
+    toggle            Toggle play/pause
+    next              Next track
+    previous          Previous track
+    seek <seconds>    Seek to position
+
+Volume:
+    volume <level>   Set volume (0-100, or +10/-10 for relative)
+    mute              Toggle mute
+    unmute             Unmute
+
+Grouping:
+    group <rooms>     Group speakers (comma-separated)
+    ungroup           Ungroup all speakers
+    pause-all         Pause all speakers
+
+Info:
+    now               Show now playing
+    favorites         List favorites
+    rooms             List rooms
+
+Search & Play:
+    search <query>    Search for music
+    play-favorite <name>  Play a favorite
+    play-uri <uri>   Play by URI
+
+Options:
+    --room NAME       Target specific room
+    --json            JSON output
+
+Examples:
+    $(basename "$0") play
+    $(basename "$0") volume 50
+    $(basename "$0") volume +10
+    $(basename "$0") group "Living Room,Kitchen"
+    $(basename "$0") now --json
+
+EOF
+    exit 1
+}
+
+# Check for sonoscli
+SONOSCLI=""
+if command -v sonoscli &> /dev/null; then
+    SONOSCLI="sonoscli"
+elif command -v sonos &> /dev/null; then
+    SONOSCLI="sonos"
+elif [[ -x "${HOME}/.cargo/bin/sonoscli" ]]; then
+    SONOSCLI="${HOME}/.cargo/bin/sonoscli"
+fi
+
+if [[ -z "$SONOSCLI" ]]; then
+    echo -e "${YELLOW}Sonos CLI not found.${NC}" >&2
+    echo "" >&2
+    echo "To install:" >&2
+    echo "  npm install -g sonos-cli" >&2
+    echo "  or" >&2
+    echo "  cargo install sonoscli" >&2
+    exit 1
+fi
+
+# Room handling
+ROOM=""
+JSON=""
+
+parse_opts() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --room) ROOM="--room $2"; shift 2 ;;
+            --json) JSON="--json"; shift ;;
+            *) shift ;;
+        esac
+    done
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    play)
+        $SONOSCLI play $ROOM
+        ;;
+    pause)
+        $SONOSCLI pause $ROOM
+        ;;
+    toggle)
+        $SONOSCLI toggle $ROOM
+        ;;
+    next)
+        $SONOSCLI next $ROOM
+        ;;
+    previous)
+        $SONOSCLI previous $ROOM
+        ;;
+    seek)
+        $SONOSCLI seek "$2" $ROOM
+        ;;
+    volume)
+        $SONOSCLI volume "$2" $ROOM
+        ;;
+    mute)
+        $SONOSCLI mute $ROOM
+        ;;
+    unmute)
+        $SONOSCLI unmute $ROOM
+        ;;
+    group)
+        $SONOSCLI group "$2"
+        ;;
+    ungroup)
+        $SONOSCLI ungroup
+        ;;
+    pause-all)
+        $SONOSCLI pause-all
+        ;;
+    now)
+        shift
+        parse_opts "$@"
+        $SONOSCLI now $ROOM $JSON
+        ;;
+    favorites)
+        $SONOSCLI favorites $ROOM
+        ;;
+    rooms)
+        $SONOSCLI rooms
+        ;;
+    search)
+        shift
+        $SONOSCLI search "$@"
+        ;;
+    play-favorite)
+        $SONOSCLI play-favorite "$2" $ROOM
+        ;;
+    play-uri)
+        $SONOSCLI play-uri "$2" $ROOM
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}" >&2
+        usage
+        ;;
+esac

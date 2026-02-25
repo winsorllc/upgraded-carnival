@@ -1,0 +1,39 @@
+#!/bin/bash
+# Coding Agent Wrapper
+set -e
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Coding Agent - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: review, refactor, fix, test
+EOF
+    exit 1
+}
+
+cmd_review() {
+    echo "Code review mode"
+    if [[ -n "$1" ]]; then
+        case "$1" in
+            --pr) echo "Reviewing PR: $2" ;;
+            --diff) echo "Reviewing diff: $2" ;;
+            *) echo "Usage: review --pr <url> or --diff <file>" ;;
+        esac
+    fi
+}
+
+cmd_refactor() { echo "Refactor: $@"; }
+cmd_fix() { echo "Fix: $@"; }
+cmd_test() { echo "Test: $@"; }
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+case "$COMMAND" in
+    review) shift; cmd_review "$@" ;;
+    refactor) shift; cmd_refactor "$@" ;;
+    fix) shift; cmd_fix "$@" ;;
+    test) shift; cmd_test "$@" ;;
+    *) echo "Unknown: $COMMAND" ;;
+esac

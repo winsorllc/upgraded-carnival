@@ -1,0 +1,225 @@
+#!/bin/bash
+# WhatsApp Business API CLI
+# Send messages via WhatsApp Business API
+
+set -e
+
+CONFIG_FILE="${HOME}/.thepopebot/config.json"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+WhatsApp Business CLI
+
+Usage: $(basename "$0") <command> [OPTIONS]
+
+Commands:
+    send              Send a text message
+    template          Send a template message
+    media             Send media message
+    react             React to a message
+    label             Add label to conversation
+    status            Check API status
+
+Options:
+    --to PHONE        Recipient phone (E.164 format: +15551234567)
+    --message TEXT    Message text
+    --message-id ID  Message ID for reactions
+    --emoji EMOJI     Reaction emoji
+    --template NAME   Template name
+    --media URL       Media URL
+    --label NAME      Label name
+    --json            JSON output
+
+Examples:
+    $(basename "$0") send --to "+15551234567" --message "Hello"
+    $(basename "$0") template --to "+15551234567" --template "hello_world"
+    $(basename "$0") media --to "+15551234567" --media "https://example.com/img.jpg"
+
+EOF
+    exit 1
+}
+
+get_config() {
+    local key="$1"
+    local default="${2:-}"
+    
+    local env_key="WHATSAPP_${key^^}"
+    if [[ -n "${!env_key}" ]]; then
+        echo "${!env_key}"
+        return
+    fi
+    
+    if [[ -f "$CONFIG_FILE" ]]; then
+        local value
+        value=$(grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$CONFIG_FILE" 2>/dev/null | sed 's/.*"\([^"]*\)"/\1/')
+        if [[ -n "$value" ]]; then
+            echo "$value"
+            return
+        fi
+    fi
+    
+    echo "$default"
+}
+
+get_token() { get_config "whatsapp_token"; }
+get_phone_id() { get_config "whatsapp_phone_id"; }
+
+wa_api() {
+    local method="$1"
+    local endpoint="$2"
+    shift 2
+    
+    local token phone_id
+    token=$(get_token)
+    phone_id=$(get_phone_id)
+    
+    if [[ -z "$token" || -z "$phone_id" ]]; then
+        echo -e "${RED}Error: WHATSAPP_TOKEN and WHATSAPP_PHONE_ID required${NC}" >&2
+        exit 1
+    fi
+    
+    local url="https://graph.facebook.com/v18.0/${phone_id}/${endpoint}?access_token=${token}"
+    
+    # Build JSON body for POST
+    local body=""
+    if [[ "$method" == "POST" ]]; then
+        body=$(printf '%s\n' "$@" | jq -s 'add')
+        curl -s -X POST -H "Content-Type: application/json" -d "$body" "$url"
+    else
+        curl -s "$url"
+    fi
+}
+
+cmd_send() {
+    local to=""
+    local message=""
+    local media=""
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --to) to="$2"; shift 2 ;;
+            --message) message="$2"; shift 2 ;;
+            --media) media="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [[ -z "$to" || (-z "$message" && -z "$media") ]]; then
+        echo -e "${RED}Error: --to and (--message or --media) required${NC}" >&2
+        exit 1
+    fi
+    
+    # Format phone (ensure E.164)
+    to="${to#+}"  # Remove + if present
+    
+    local payload
+    if [[ -n "$media" ]]; then
+        payload=$(jq -n \
+            --arg msg "$message" \
+            --arg url "$media" \
+            --argjson type "$(file --mime-type -b "$media" 2>/dev/null | grep -q image && echo "IMAGE" || echo "DOCUMENT")" \
+            '{messaging_product: "whatsapp", to: $to, type: $type, $type: {link: $url}}')
+    else
+        payload=$(jq -n \
+            --arg msg "$message" \
+            '{messaging_product: "whatsapp", to: env.TO, type: "text", text: {body: $msg}}')
+        payload="${payload/\"TO\"/\"$to\"}"
+    fi
+    
+    echo -e "${GREEN}Sending message to $to...${NC}"
+    wa_api POST "messages" "$payload"
+    echo -e "${GREEN}Message sent${NC}"
+}
+
+cmd_template() {
+    local to=""
+    local template=""
+    local language="en_US"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --to) to="$2"; shift 2 ;;
+            --template) template="$2"; shift 2 ;;
+            --language) language="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [[ -z "$to" || -z "$template" ]]; then
+        echo -e "${RED}Error: --to and --template required${NC}" >&2
+        exit 1
+    fi
+    
+    to="${to#+}"
+    
+    local payload
+    payload=$(jq -n \
+        --arg to "$to" \
+        --arg tmpl "$template" \
+        --arg lang "$language" \
+        '{messaging_product: "whatsapp", to: $to, type: "template", template: {name: $tmpl, language: {code: $lang}}}')
+    
+    echo -e "${GREEN}Sending template...${NC}"
+    wa_api POST "messages" "$payload"
+}
+
+cmd_react() {
+    local to=""
+    local message_id=""
+    local emoji="👍"
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --to) to="$2"; shift 2 ;;
+            --message-id) message_id="$2"; shift 2 ;;
+            --emoji) emoji="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [[ -z "$to" || -z "$message_id" ]]; then
+        echo -e "${RED}Error: --to and --message-id required${NC}" >&2
+        exit 1
+    fi
+    
+    to="${to#+}"
+    
+    local payload
+    payload=$(jq -n \
+        --arg to "$to" \
+        --arg msg_id "$message_id" \
+        --arg emoji "$emoji" \
+        '{messaging_product: "whatsapp", to: $to, type: "reaction", reaction: {message_id: $msg_id, emoji: $emoji}}')
+    
+    wa_api POST "messages" "$payload"
+}
+
+cmd_status() {
+    local token
+    token=$(get_token)
+    
+    if [[ -z "$token" ]]; then
+        echo -e "${RED}Error: WHATSAPP_TOKEN required${NC}" >&2
+        exit 1
+    fi
+    
+    curl -s "https://graph.facebook.com/v18.0/me?access_token=${token}" | jq '.'
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    send) shift; cmd_send "$@" ;;
+    template) shift; cmd_template "$@" ;;
+    media) shift; cmd_send --media "$2" "${@:3}" ;;
+    react) shift; cmd_react "$@" ;;
+    status) cmd_status ;;
+    *) echo -e "${RED}Unknown command: $COMMAND${NC}" >&2; usage ;;
+esac

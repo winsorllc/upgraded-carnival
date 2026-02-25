@@ -1,0 +1,84 @@
+#!/bin/bash
+# Obsidian Vault CLI - Read, search, and manage Obsidian notes
+set -e
+
+CONFIG_FILE="${HOME}/.thepopebot/config.json"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Obsidian Vault CLI - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: list, search, read, create, edit, delete, links, backlinks, tags, today
+Examples: $(basename "$0") list --folder Projects; $(basename "$0") search "keyword"
+EOF
+    exit 1
+}
+
+get_vault_path() {
+    if [[ -n "$OBSIDIAN_VAULT" ]]; then echo "$OBSIDIAN_VAULT"; return; fi
+    if [[ -f "$CONFIG_FILE" ]]; then
+        grep -o '"vault_path"[[:space:]]*:[[:space:]]*"[^"]*"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"\([^"]*\)"/\1/'
+    fi
+}
+
+vault_path() { get_vault_path; }
+note_to_path() { echo "$(get_vault_path)/$1.md"; }
+
+cmd_list() {
+    local vault; vault=$(get_vault_path)
+    if [[ -z "$vault" ]]; then echo "Vault not configured"; exit 1; fi
+    find "$vault" -name "*.md" -type f 2>/dev/null | sed "s|$vault/||g" | sed 's|\.md$||g'
+}
+
+cmd_search() {
+    local query="$1"
+    local vault; vault=$(get_vault_path)
+    if [[ -z "$vault" || -z "$query" ]]; then usage; fi
+    grep -ri "$query" "$vault" --include="*.md" 2>/dev/null | grep "\.md:" | cut -d: -f1 | sort -u | sed "s|$vault/||g" | sed 's|\.md$||g'
+}
+
+cmd_read() {
+    local note="$1"
+    if [[ -z "$note" ]]; then usage; fi
+    local path; path=$(note_to_path "$note")
+    if [[ -f "$path" ]]; then cat "$path"; else echo "Note not found: $note"; exit 1; fi
+}
+
+cmd_create() {
+    local note="$1"
+    local content="$2"
+    if [[ -z "$note" ]]; then usage; fi
+    local vault; vault=$(get_vault_path)
+    local path="$vault/$note.md"
+    mkdir -p "$(dirname "$path")"
+    if [[ -z "$content" ]]; then content="# $note"; fi
+    echo "$content" > "$path"
+    echo "Created: $note"
+}
+
+cmd_tags() {
+    local vault; vault=$(get_vault_path)
+    if [[ -z "$vault" ]]; then echo "Vault not configured"; exit 1; fi
+    grep -rht "^tags:\|tag:" "$vault" --include="*.md" 2>/dev/null | tr ',' '\n' | sort -u
+}
+
+cmd_today() {
+    local date; date=$(date +%Y-%m-%d)
+    cmd_create "Daily/$date" "# $(date +'%B %d, %Y')\n\n## Tasks\n- [ ] \n\n## Notes\n"
+}
+
+COMMAND="${1:-}"
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    list) shift; cmd_list "$@" ;;
+    search) shift; cmd_search "$@" ;;
+    read) shift; cmd_read "$@" ;;
+    create) shift; cmd_create "$@" ;;
+    tags) cmd_tags ;;
+    today) cmd_today ;;
+    *) echo "Unknown: $COMMAND"; usage ;;
+esac

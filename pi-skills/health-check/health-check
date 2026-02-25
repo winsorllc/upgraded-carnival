@@ -1,0 +1,119 @@
+#!/bin/bash
+# Health Check - Service monitoring
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+usage() {
+    cat << EOF
+Health Check - Usage: $(basename "$0") <command> [OPTIONS]
+Commands: http, dns, port, ssl, process, batch
+Examples: 
+  $(basename "$0") http https://example.com
+  $(basename "$0") dns example.com --type A
+  $(basename "$0") port example.com 443
+EOF
+    exit 1
+}
+
+check_http() {
+    local url="$1"
+    local expected="${2:-200}"
+    local timeout="${3:-10}"
+    
+    if [[ -z "$url" ]]; then usage; fi
+    
+    local start; start=$(date +%s%3N)
+    local response; response=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$timeout" "$url" 2>/dev/null || echo "000")
+    local end; end=$(date +%s%3N)
+    local elapsed=$((end - start))
+    
+    if [[ "$response" == "$expected" ]]; then
+        echo -e "${GREEN}✓${NC} HTTP $url - ${response} (${elapsed}ms)"
+        return 0
+    else
+        echo -e "${RED}✗${NC} HTTP $url - Expected $expected, got $response"
+        return 1
+    fi
+}
+
+check_dns() {
+    local domain="$1"
+    local type="${2:-A}"
+    
+    if [[ -z "$domain" ]]; then usage; fi
+    
+    local result; result=$(dig +short "$domain" "$type" 2>/dev/null | head -1)
+    
+    if [[ -n "$result" ]]; then
+        echo -e "${GREEN}✓${NC} DNS $domain ($type): $result"
+        return 0
+    else
+        echo -e "${RED}✗${NC} DNS $domain ($type): No result"
+        return 1
+    fi
+}
+
+check_port() {
+    local host="$1"
+    local port="$2"
+    local timeout="${3:-5}"
+    
+    if [[ -z "$host" || -z "$port" ]]; then usage; fi
+    
+    if timeout "$timeout" bash -c "echo >/dev/tcp/$host/$port" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Port $host:$port - Open"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Port $host:$port - Closed/Timeout"
+        return 1
+    fi
+}
+
+check_ssl() {
+    local domain="$1"
+    local days="${2:-30}"
+    
+    if [[ -z "$domain" ]]; then usage; fi
+    
+    local expiry; expiry=$(echo | openssl s_client -servername "$domain" -connect "$domain:443" 2>/dev/null | openssl x509 -noout -dates 2>/dev/null | grep notAfter | cut -d= -f2)
+    
+    if [[ -n "$expiry" ]]; then
+        echo -e "${GREEN}✓${NC} SSL $domain - Expires: $expiry"
+    else
+        echo -e "${RED}✗${NC} SSL $domain - Certificate error"
+        return 1
+    fi
+}
+
+check_process() {
+    local name="$1"
+    
+    if [[ -z "$name" ]]; then usage; fi
+    
+    if pgrep -x "$name" > /dev/null; then
+        local pid; pid=$(pgrep -x "$name")
+        echo -e "${GREEN}✓${NC} Process $name - Running (PID: $pid)"
+        return 0
+    else
+        echo -e "${RED}✗${NC} Process $name - Not running"
+        return 1
+    fi
+}
+
+COMMAND="${1:-}"
+shift || true
+[[ "$COMMAND" == "--help" || -z "$COMMAND" ]] && usage
+
+case "$COMMAND" in
+    http) check_http "$@" ;;
+    dns) check_dns "$@" ;;
+    port) check_port "$@" ;;
+    ssl) check_ssl "$@" ;;
+    process) check_process "$@" ;;
+    batch) echo "Batch mode - config file required" ;;
+    *) echo "Unknown: $COMMAND"; usage ;;
+esac
