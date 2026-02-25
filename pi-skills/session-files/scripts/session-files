@@ -1,0 +1,9 @@
+#!/bin/bash
+# Session Files CLI wrapper
+# Usage: session-files <command> [options]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export JOB_ID="${JOB_ID:-interactive}"
+export SESSION_DIR="${SESSION_DIR:-/job/logs}"
+
+exec node "$SCRIPT_DIR/session-files.js" "$@"
