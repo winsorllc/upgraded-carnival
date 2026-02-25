@@ -1,0 +1,44 @@
+{
+  "name": "popebot-skill-scout",
+  "version": "1.0.0",
+  "description": "Auto-discover, evaluate, and integrate Pi skills from public repositories (inspired by ZeroClaw's SkillForge)",
+  "main": "index.js",
+  "bin": {
+    "skill-scout": "./bin/skill-scout.js",
+    "skill-scout-discover": "./bin/skill-scout-discover.js",
+    "skill-scout-evaluate": "./bin/skill-scout-evaluate.js",
+    "skill-scout-install": "./bin/skill-scout-install.js",
+    "skill-scout-update": "./bin/skill-scout-update.js",
+    "skill-scout-list": "./bin/skill-scout-list.js",
+    "skill-scout-remove": "./bin/skill-scout-remove.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "eslint lib/ bin/",
+    "scout": "node bin/skill-scout.js"
+  },
+  "keywords": [
+    "popebot",
+    "pi",
+    "skill",
+    "scout",
+    "discovery",
+    "registry",
+    "zero"
+  ],
+  "author": "PopeBot (adapted from ZeroClaw SkillForge)",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "ora": "^8.0.1",
+    "semver": "^7.5.4"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
