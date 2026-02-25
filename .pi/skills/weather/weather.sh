@@ -1,107 +1,36 @@
 #!/bin/bash
-# Weather skill - fetch weather data from wttr.in
-set -euo pipefail
+# Weather skill - Get weather information from wttr.in
 
-BASEDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+location="${1:-}"
+format="${2:-3}"
 
-usage() {
-    cat >&2 <<'EOF'
-Usage: weather.sh <location> [options]
-
-Options:
-  --format=short    One-line summary (default)
-  --format=full     Detailed multi-line output
-  --json            JSON output
-  --forecast        Show forecast instead of current
-  --days=N          Number of days for forecast (1-7)
-  -h, --help        Show this help
-
-Examples:
-  weather.sh "London"
-  weather.sh "New York" --format=full
-  weather.sh "Tokyo" --json
-  weather.sh "Paris" --forecast --days=3
-  weather.sh "JFK" --format=short
-EOF
-    exit 2
-}
-
-# Parse arguments
-LOCATION=""
-FORMAT="short"
-JSON=false
-FORECAST=false
-DAYS=3
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            usage
-            ;;
-        --format=*)
-            FORMAT="${1#*=}"
-            ;;
-        --format)
-            shift
-            FORMAT="${1:-short}"
-            ;;
-        --json)
-            JSON=true
-            ;;
-        --forecast)
-            FORECAST=true
-            ;;
-        --days=*)
-            DAYS="${1#*=}"
-            ;;
-        --days)
-            shift
-            DAYS="${1:-3}"
-            ;;
-        -*)
-            echo "Unknown option: $1" >&2
-            usage
-            ;;
-        *)
-            if [[ -z "$LOCATION" ]]; then
-                LOCATION="$1"
-            fi
-            ;;
-    esac
-    shift
-done
-
-if [[ -z "$LOCATION" ]]; then
-    echo "Error: Location required" >&2
-    usage
+if [ -z "$location" ]; then
+    echo "Usage: weather <location> [format]"
+    echo "  format 3: One-line summary (default)"
+    echo "  format 0: Detailed current"
+    echo "  format v2: Week forecast"
+    echo "  format j1: JSON output"
+    exit 1
 fi
 
-# URL encode location
-ENCODED_LOCATION=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$LOCATION'))" 2>/dev/null || echo "$LOCATION" | sed 's/ /+/g')
+# URL encode the location
+encoded_location=$(echo "$location" | sed 's/ /+/g')
 
-# Build URL based on options
-if [[ "$JSON" == "true" ]]; then
-    # JSON format
-    URL="https://wttr.in/${ENCODED_LOCATION}?format=j1"
-    curl -s "$URL"
-elif [[ "$FORECAST" == "true" ]]; then
-    # Forecast view
-    URL="https://wttr.in/${ENCODED_LOCATION}?${DAYS}"
-    curl -s "$URL"
-else
-    # Current weather
-    case "$FORMAT" in
-        short)
-            # One-liner: Location: Condition, Temperature
-            curl -s "https://wttr.in/${ENCODED_LOCATION}?format=3"
-            ;;
-        full)
-            # Detailed current conditions
-            curl -s "https://wttr.in/${ENCODED_LOCATION}?0"
-            ;;
-        *)
-            echo "Unknown format: $FORMAT" >&2
-            usage
-            ;;
-    esac
-fi
+# Get weather based on format
+case "$format" in
+    3)
+        curl -s "wttr.in/${encoded_location}?format=3"
+        ;;
+    0)
+        curl -s "wttr.in/${encoded_location}?0"
+        ;;
+    v2)
+        curl -s "wttr.in/${encoded_location}?format=v2"
+        ;;
+    j1)
+        curl -s "wttr.in/${encoded_location}?format=j1"
+        ;;
+    *)
+        curl -s "wttr.in/${encoded_location}?format=${format}"
+        ;;
+esac
