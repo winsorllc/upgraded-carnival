@@ -1,196 +1,95 @@
 ---
 name: health-check
-description: System health monitoring and diagnostics. Use when: (1) checking system resources (CPU, memory, disk), (2) monitoring service health and uptime, (3) running health checks on endpoints, (4) alerting on service failures.
+description: Monitor service health and uptime. Check HTTP endpoints, DNS, ports, and system resources.
 ---
 
-# Health Check Skill
+# Health Check
 
-System health monitoring and diagnostics for servers, containers, and services.
-
-## When to Use
-
-✅ **USE this skill when:**
-- Checking CPU, memory, disk usage
-- Monitoring service health and uptime
-- Running health checks on HTTP endpoints
-- Detecting failing services
-- Creating health monitoring dashboards
-- Alerting on resource thresholds
-
-❌ **DON'T use this skill when:**
-- Deep system debugging → use system-doctor skill
-- Performance profiling → use specialized tools
+Monitor service health and uptime. Check HTTP endpoints, DNS resolution, port connectivity, and system resources.
 
 ## Setup
 
-```bash
-# Install dependencies (if needed)
-# Most tools are built-in (ps, df, free, curl)
-```
+No additional setup required.
 
-## Common Commands
+## Usage
 
-### System Resources
+### Check HTTP Endpoint
 
 ```bash
-# Quick CPU and memory overview
-health-check.js system
-
-# Detailed system info
-health-check.js system --json
-
-# Disk usage
-health-check.js disk
-
-# Disk usage for specific path
-health-check.js disk /home
+{baseDir}/health-check.js --url "https://api.example.com/health"
 ```
 
-### Service Health
+### Check Port
 
 ```bash
-# Check if a service is running
-health-check.js service nginx
-
-# Check multiple services
-health-check.js service nginx mysql redis
-
-# Check service status (systemd)
-health-check.js service nginx --systemd
+{baseDir}/health-check.js --host "localhost" --port 3000
 ```
 
-### HTTP Endpoints
+### Check DNS
 
 ```bash
-# Basic health check
-health-check.js endpoint https://example.com/health
-
-# Check with custom expected status
-health-check.js endpoint https://api.example.com/health --expected 200
-
-# Check response time
-health-check.js endpoint https://example.com --timing
+{baseDir}/health-check.js --dns "example.com"
 ```
 
-### Docker Containers
+### Full System Check
 
 ```bash
-# List container health
-health-check.js docker
-
-# Check specific container
-health-check.js docker nginx
+{baseDir}/health-check.js --system
 ```
 
-### Process Monitoring
+## Options
 
-```bash
-# Top processes by CPU
-health-check.js top --cpu
+| Option | Description | Required |
+|--------|-------------|----------|
+| `--url` | URL to check | No |
+| `--host` | Hostname to check | No |
+| `--port` | Port to check | No |
+| `--dns` | DNS name to resolve | No |
+| `--system` | Run system health check | No |
+| `--timeout` | Timeout in seconds (default: 10) |
 
-# Top processes by memory
-health-check.js top --mem
+## Checks Performed
 
-# Find process by name
-health-check.js process nginx
+### HTTP Check
+- Response time
+- Status code
+- SSL certificate validity
+- Content validation (optional)
+
+### Port Check
+- Connection status
+- Response time
+
+### DNS Check
+- Resolution time
+- All record types
+
+### System Check
+- CPU usage
+- Memory usage
+- Disk usage
+- Load average
+
+## Output Format
+
+```json
+{
+  "status": "healthy",
+  "checks": [
+    {
+      "name": "api",
+      "status": "pass",
+      "responseTime": 150,
+      "details": {...}
+    }
+  ],
+  "timestamp": "2024-01-01T00:00:00Z"
+}
 ```
 
-### Network
+## When to Use
 
-```bash
-# Check port availability
-health-check.js port 80
-
-# Check multiple ports
-health-check.js port 80 443 3000
-
-# Check if host is reachable
-health-check.js ping example.com
-```
-
-### Comprehensive Health
-
-```bash
-# Full system health report
-health-check.js report
-
-# Quick status summary
-health-check.js status
-```
-
-## Scripting Examples
-
-### Monitor multiple endpoints
-
-```bash
-#!/bin/bash
-ENDPOINTS=(
-    "https://api.example.com/health"
-    "https://admin.example.com/health"
-    "https://cdn.example.com/health"
-)
-
-for url in "${ENDPOINTS[@]}"; do
-    result=$(health-check.js endpoint "$url" --json)
-    status=$(echo "$result" | jq -r '.status')
-    if [ "$status" != "ok" ]; then
-        echo "ALERT: $url is down!"
-    fi
-done
-```
-
-### Alert on high resource usage
-
-```bash
-#!/bin/bash
-THRESHOLD=90
-
-cpu=$(health-check.js system --json | jq -r '.cpu.usage')
-mem=$(health-check.js system --json | jq -r '.memory.usage')
-
-if [ "$cpu" -gt "$THRESHOLD" ]; then
-    echo "ALERT: CPU at ${cpu}%"
-fi
-
-if [ "$mem" -gt "$THRESHOLD" ]; then
-    echo "ALERT: Memory at ${mem}%"
-fi
-```
-
-### Wait for service to be ready
-
-```bash
-#!/bin/bash
-# Wait for endpoint to be healthy
-for i in {1..30}; do
-    if health-check.js endpoint https://api.example.com/health --quiet; then
-        echo "Service is ready!"
-        exit 0
-    fi
-    sleep 2
-done
-echo "Service failed to become ready"
-exit 1
-```
-
-## Output Formats
-
-- Default: Human-readable colored output
-- `--json`: JSON output for scripting
-- `--quiet`: Exit code only (0 = healthy, 1 = unhealthy)
-- `--timing`: Include response time metrics
-
-## Thresholds
-
-Default thresholds:
-- CPU: 80% warning, 90% critical
-- Memory: 80% warning, 90% critical  
-- Disk: 85% warning, 95% critical
-- HTTP response time: 5s warning, 10s critical
-
-## Notes
-
-- Uses built-in system tools (ps, df, free, etc.)
-- Docker commands require Docker CLI
-- HTTP checks follow redirects by default
-- All checks are read-only (no mutations)
+- Monitoring service availability
+- Pre-deployment checks
+- Cron-based health monitoring
+- Automated alerting
