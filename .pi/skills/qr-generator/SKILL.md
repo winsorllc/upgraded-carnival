@@ -1,55 +1,88 @@
 ---
 name: qr-generator
-description: Generate QR codes for URLs, text, WiFi, contact cards, and more. Outputs to text or saves as PNG.
+description: Generate QR codes for URLs, text, WiFi, contact cards, contact info, and more. ASCII art output and saves to files. Inspired by OpenClaw's text generation capabilities.
 ---
 
-# QR Code Generator
+# QR Generator
 
-Generate QR codes for various purposes.
+Generate QR codes for various data types.
 
-## Capabilities
+## Features
 
-- Generate QR codes for text and URLs
-- Generate WiFi QR codes
-- Generate contact card QR codes
-- Generate vCard and meCard formats
-- Output as ASCII art (for terminal display)
-- Save as PNG files (requires qrcode library)
-- Multiple error correction levels
+- **Text**: Generate QR codes for any text
+- **URL**: QR codes that link to websites
+- **WiFi**: WiFi connection QR codes
+- **Contact**: vCard QR codes
+- **Email**: Email QR codes
+- **Phone**: Call/tel QR codes
+- **Output**: ASCII art or save to PNG
 
 ## Usage
 
 ```bash
-# Generate QR code for URL
-/job/.pi/skills/qr-generator/qr.js url "https://example.com"
+# Basic text QR
+./scripts/qr.js "Hello World"
 
-# Generate QR code for text
-/job/.pi/skills/qr-generator/qr.js text "Hello World"
+# URL QR
+./scripts/qr.js --type url "https://example.com"
 
-# Generate WiFi QR code
-/job/.pi/skills/qr-generator/qr.js wifi --ssid "MyNetwork" --password "secret123" --type WPA
+# WiFi QR
+./scripts/qr.js --type wifi --ssid "MyNetwork" --password "secret123"
 
-# Generate contact card
-/job/.pi/skills/qr-generator/qr.js contact --name "John Doe" --phone "+1234567890" --email "john@example.com"
+# Contact QR
+./scripts/qr.js --type contact --name "John Doe" --phone "555-123-4567" --email "john@example.com"
 
 # Save to file
-/job/.pi/skills/qr-generator/qr.js url "https://example.com" --output qr.png
-
-# Display as ASCII
-/job/.pi/skills/qr-generator/qr.js text "Hello" --ascii
-
-# QR code with custom error correction
-/job/.pi/skills/qr-generator/qr.js url "https://example.com" --error L | M | Q | H
+./scripts/qr.js "Hello" --output qrcode.txt
 ```
 
-## Output Formats
+## Examples
 
-- Text: Base64 encoded PNG or ASCII art
-- File: PNG image file
+| Task | Command |
+|------|---------|
+| Simple text | `./scripts/qr.js "Hello World"` |
+| URL | `./scripts/qr.js -t url "https://github.com"` |
+| WiFi | `./scripts/qr.js -t wifi -s MySSID -p password` |
+| Contact | `./scripts/qr.js -t contact -n "John Doe" -p "555-1234"` |
+| Email | `./scripts/qr.js -t email -a "test@example.com" -s "Subject"` |
+| Phone | `./scripts/qr.js -t tel "+1234567890"` |
+
+## Output Format
+
+```
+███████████████████████████
+██ ▄▄▄▄▄ █▀▄▀▀ ▀▄▀▄█ ▄▄▄▄▄ ██
+██ █   █ ██▄█▀█▀ ▀█ █   █ ██
+██ █▄▄▄█ █▀▀▀▀▄▀▄▀█ █▄▄▄█ ██
+██▄▄▄▄▄▄▄█▄▀▄▀ █▀▄█▄▄▄▄▄▄▄██
+██▄ █▄ █▄▀▀ ▀██▄▀▄██▀██ █ ██
+██▀██ ▀█▄█▄▀▄▀ ▀▀▀█▄▄██▀▀▀██
+██▀▄▄▀▀ ▄▄▀▄▀ █▀ ▄▄█▀▄▀█ ▄██
+██▄ ▀█▄▀▀ █▀██ ██ ▄▄▄██▀ ▄██
+██ ▀ ▄▀ ▄█▄█▄▀ ▀▀ ▀▀ ▄█▀█▀██
+██▄██████▄▄ █▄ ▀ ▄█ ▄▄▄ █▀▀█
+██ ▄▄▄▄▄ ██▄▄▀█▄▀▄█ █▄█ █▄██
+██ █   █ ▄▄▀█ ▀▄█▄█ ▄▄▄▀▄███
+██ █▄▄▄█ █▄▄█▄█▀▄▀▄ ▄█▄▀▀▄██
+██▄▄▄▄▄▄▄█▄██▄▄▄██▄█▄██▄███
+███████████████████████████
+```
+
+## QR Code Types
+
+| Type | Data Format |
+|------|-------------|
+| text | Plain text |
+| url | https://example.com |
+| wifi | WIFI:T:WPA;S:ssid;P:password;; |
+| contact | BEGIN:VCARD...END:VCARD |
+| email | mailto:test@example.com?subject=...
+| tel | tel:+1234567890 |
 
 ## Notes
 
-- ASCII mode works without external dependencies
-- PNG mode requires the qrcode npm package
-- Default size: 256x256 pixels for PNG
-- Color: Black modules on white background
+- Uses simple ASCII art representation
+- For real QR codes, use a proper QR library
+- ASCII representation may not scan with all devices
+- WiFi QRs follow the WIFI QR standard
+- Contact QRs follow vCard 3.0 format
