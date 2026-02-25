@@ -1,0 +1,29 @@
+{
+  "name": "hybrid-memory",
+  "version": "1.0.0",
+  "description": "Hybrid memory system with vector + keyword search in SQLite",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "node tests/memory.test.js",
+    "init": "node bin/memory-init.js",
+    "store": "node bin/memory-store.js",
+    "search": "node bin/memory-search.js",
+    "recall": "node bin/memory-recall.js",
+    "list": "node bin/memory-list.js",
+    "stats": "node bin/memory-stats.js"
+  },
+  "bin": {
+    "memory-init": "./bin/memory-init.js",
+    "memory-store": "./bin/memory-store.js",
+    "memory-search": "./bin/memory-search.js",
+    "memory-recall": "./bin/memory-recall.js",
+    "memory-stats": "./bin/memory-stats.js"
+  },
+  "keywords": ["memory", "vector", "search", "sqlite", "embeddings"],
+  "author": "PopeBot",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.28.0",
+    "sqlite3": "^5.1.7"
+  }
+}
