@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "agent": "research",
+  "result": "RESEARCH RESULTS for: \"What are the latest developments in AI agent frameworks?\"\n\n1. Source: Example Research Paper\n   Summary: Key findings related to the query...\n\n2. Source: Technical Documentation\n   Summary: Relevant technical details...\n\n3. Source: Industry Analysis\n   Summary: Market trends and insights...",
+  "duration_ms": 114,
+  "tokens_used": {
+    "prompt": 14,
+    "completion": 79
+  },
+  "model": "gpt-4o-mini",
+  "provider": "openai"
+}

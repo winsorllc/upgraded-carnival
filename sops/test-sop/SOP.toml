@@ -1,0 +1,8 @@
+[sop]
+name = "test-sop"
+description = "Test SOP with conditions and approval gates"
+version = "1.0.0"
+priority = "medium"
+execution_mode = "supervised"
+cooldown_secs = 60
+max_concurrent = 1

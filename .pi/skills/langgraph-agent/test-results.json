@@ -1,0 +1,22 @@
+{
+  "passed": 4,
+  "failed": 0,
+  "tests": [
+    {
+      "name": "Module exports",
+      "status": "passed"
+    },
+    {
+      "name": "Create custom tool",
+      "status": "passed"
+    },
+    {
+      "name": "Agent creation with config",
+      "status": "passed"
+    },
+    {
+      "name": "Default tools availability",
+      "status": "passed"
+    }
+  ]
+}
