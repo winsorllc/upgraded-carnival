@@ -1,5 +1,7 @@
 const { z } = require('zod');
-const nodemailer = require('nodemailer');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const sendEmailSkill = {
     name: 'send_email',
@@ -11,42 +13,58 @@ const sendEmailSkill = {
         isImportant: z.boolean().optional().describe('Set to true if this is an urgent notification.')
     }),
     async execute({ to, subject, body, isImportant }, context) {
-        const user = process.env.POPEBOT_EMAIL_USER;
-        const pass = process.env.POPEBOT_EMAIL_PASS;
+        const user = process.env.AGENT_LLM_POPEBOT_EMAIL_USER || process.env.POPEBOT_EMAIL_USER;
+        const pass = process.env.AGENT_LLM_POPEBOT_EMAIL_PASS || process.env.POPEBOT_EMAIL_PASS;
 
         if (!user || !pass) {
             throw new Error("PopeBot's Gmail SMTP is not configured. The USER must set POPEBOT_EMAIL_USER and POPEBOT_EMAIL_PASS in their environment.");
         }
 
+        const finalSubject = isImportant ? `[URGENT] ${subject}` : subject;
+
+        // Use Python's built-in smtplib to avoid Node module dependency issues in the Docker Sandbox
+        const pythonScript = `
+import smtplib
+from email.message import EmailMessage
+import sys
+import os
+
+msg = EmailMessage()
+msg.set_content(sys.argv[3])
+msg['Subject'] = sys.argv[2]
+msg['From'] = f"The War Room Agent <{sys.argv[1]}>"
+msg['To'] = sys.argv[4]
+
+try:
+    server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+    server.login(sys.argv[1], os.environ['SMTP_PASS'])
+    server.send_message(msg)
+    server.quit()
+    sys.exit(0)
+except Exception as e:
+    print(str(e))
+    sys.exit(1)
+`;
+
+        const scriptBase64 = Buffer.from(pythonScript).toString('base64');
+
         try {
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                auth: {
-                    user: user,
-                    pass: pass
-                }
-            });
+            // Execute Python strictly, passing secrets securely via env to avoid argument injection
+            const cmd = \`echo "\${scriptBase64}" | base64 -d | python3 - "\${user}" "\${finalSubject}" "\${body}" "\${to}"\`;
+      const { stdout, stderr } = await execPromise(cmd, {
+        env: { ...process.env, SMTP_PASS: pass }
+      });
 
-            const mailOptions = {
-                from: `"The War Room Agent (PopeBot)" <${user}>`,
-                to: to,
-                subject: isImportant ? `[URGENT] ${subject}` : subject,
-                text: body,
-            };
+      return {
+        success: true,
+        message: \`Email successfully sent to \${to}\`,
+      };
 
-            const info = await transporter.sendMail(mailOptions);
-
-            return {
-                success: true,
-                message: `Email successfully sent to ${to}`,
-                messageId: info.messageId,
-            };
-
-        } catch (error) {
-            console.error("Failed to send email via SMTP:", error);
-            throw new Error(`SMTP Error while sending to ${to}: ${error.message}`);
-        }
+    } catch (error) {
+      console.error("Failed to send email via SMTP:", error);
+      throw new Error(\`SMTP Error while sending to \${to}: \${error.message}\` + (error.stderr || ''));
     }
+  }
 };
 
 module.exports = sendEmailSkill;
