@@ -1,0 +1,23 @@
+{
+  "id": "bd3f19cf-c150-4e25-819e-500a2e2344bc",
+  "sop": "simple-test",
+  "startTime": "2026-02-25T12:01:40.127Z",
+  "variables": {},
+  "steps": [
+    {
+      "name": "hello",
+      "status": "success",
+      "output": "Hello World",
+      "error": ""
+    },
+    {
+      "name": "goodbye",
+      "status": "success",
+      "output": "Goodbye World",
+      "error": ""
+    }
+  ],
+  "status": "success",
+  "endTime": "2026-02-25T12:01:40.137Z",
+  "duration": 10
+}

@@ -1,0 +1,19 @@
+{
+  "id": "2809264c-8f03-40c1-927a-cfa8aa8cb299",
+  "sop": "test-sop",
+  "startTime": "2026-02-25T12:01:21.712Z",
+  "variables": {
+    "version": "1.0.0",
+    "environment": "production"
+  },
+  "steps": [
+    {
+      "name": "validate",
+      "status": "success"
+    }
+  ],
+  "status": "error",
+  "error": "Deadlock: No steps can run",
+  "endTime": "2026-02-25T12:01:21.715Z",
+  "duration": 3
+}
