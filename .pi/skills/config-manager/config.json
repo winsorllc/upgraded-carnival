@@ -1,0 +1,8 @@
+{
+  "providers": {
+    "anthropic": {
+      "api_key": "sk-ant-test123"
+    }
+  },
+  "rate_limit": 100
+}
