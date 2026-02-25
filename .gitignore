@@ -42,3 +42,13 @@ temp/
 
 # Data (SQLite memory, etc.)
 data/
+
+# Secrets
+.env
+*.log
+runs*.json
+ct_pr*.md
+all_skills.txt
+dups_compare.txt
+fail-*.log
+glm5-success.log
