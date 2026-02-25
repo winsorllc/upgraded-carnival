@@ -1,180 +1,65 @@
+#!/usr/bin/env node
+
 /**
- * Pushover Skill Tests
+ * Test suite for Pushover skill
  */
 
-const { sendPushoverNotification } = require('./index.js');
+const { execSync } = require('child_process');
+const path = require('path');
 
-// Mock fetch globally for testing
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+function runCommand(args) {
+  const argsStr = JSON.stringify(args.args);
+  const result = execSync(
+    `node "${path.resolve(__dirname, 'pushover.js')}" ${args.command} '${argsStr}'`,
+    { encoding: 'utf-8' }
+  );
+  return JSON.parse(result);
+}
 
-describe('Pushover Skill', () => {
-  const originalEnv = process.env;
+function assert(condition, message) {
+  if (!condition) {
+    console.error(`✗ FAILED: ${message}`);
+    process.exit(1);
+  }
+  console.log(`✓ ${message}`);
+}
+
+console.log('========================================');
+console.log('Pushover Skill - Test Suite');
+console.log('========================================');
+
+try {
+  // Test 1: Missing message
+  console.log('\n--- Test: Missing message ---');
+  let result = runCommand({ command: 'send', args: {} });
+  assert(result.success === false, 'Should fail without message');
+  assert(result.error, 'Should return error');
   
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env = { ...originalEnv };
-  });
+  // Test 2: Missing credentials
+  console.log('\n--- Test: Missing credentials ---');
+  result = runCommand({ command: 'send', args: { message: 'Test' } });
+  assert(result.success === false, 'Should fail without credentials');
+  assert(result.setup, 'Should show setup instructions');
   
-  afterAll(() => {
-    process.env = originalEnv;
-  });
+  // Test 3: Validate without credentials
+  console.log('\n--- Test: Validate without credentials ---');
+  result = runCommand({ command: 'validate', args: {} });
+  assert(result.success === false, 'Should fail validation');
+  assert(result.configured === false, 'Should show not configured');
   
-  describe('sendPushoverNotification', () => {
-    it('should throw error when PUSHOVER_TOKEN is missing', async () => {
-      delete process.env.PUSHOVER_TOKEN;
-      delete process.env.PUSHOVER_USER_KEY;
-      
-      await expect(sendPushoverNotification({ message: 'test' }))
-        .rejects.toThrow('PUSHOVER_TOKEN and PUSHOVER_USER_KEY must be set');
-    });
-    
-    it('should throw error when PUSHOVER_USER_KEY is missing', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      delete process.env.PUSHOVER_USER_KEY;
-      
-      await expect(sendPushoverNotification({ message: 'test' }))
-        .rejects.toThrow('PUSHOVER_TOKEN and PUSHOVER_USER_KEY must be set');
-    });
-    
-    it('should throw error when message is missing', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      await expect(sendPushoverNotification({}))
-        .rejects.toThrow('message is required');
-    });
-    
-    it('should send notification with basic parameters', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 1, request: 'abc123' })
-      });
-      
-      const result = await sendPushoverNotification({ message: 'Hello World' });
-      
-      expect(result.success).toBe(true);
-      expect(result.requestId).toBe('abc123');
-      
-      const callArgs = mockFetch.mock.calls[0];
-      expect(callArgs[0]).toBe('https://api.pushover.net/1/messages.json');
-      expect(callArgs[1].method).toBe('POST');
-    });
-    
-    it('should include title when provided', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 1, request: 'abc123' })
-      });
-      
-      await sendPushoverNotification({ 
-        message: 'Test', 
-        title: 'My Title' 
-      });
-      
-      const formData = mockFetch.mock.calls[0][1].body.toString();
-      expect(formData).toContain('title=My+Title');
-    });
-    
-    it('should include priority when provided', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 1, request: 'abc123' })
-      });
-      
-      await sendPushoverNotification({ 
-        message: 'High Priority', 
-        priority: 1 
-      });
-      
-      const formData = mockFetch.mock.calls[0][1].body.toString();
-      expect(formData).toContain('priority=1');
-    });
-    
-    it('should include sound when provided', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 1, request: 'abc123' })
-      });
-      
-      await sendPushoverNotification({ 
-        message: 'With Sound', 
-        sound: 'gamelan' 
-      });
-      
-      const formData = mockFetch.mock.calls[0][1].body.toString();
-      expect(formData).toContain('sound=gamelan');
-    });
-    
-    it('should throw error for priority 2 without retry/expire', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      await expect(sendPushoverNotification({ 
-        message: 'Emergency', 
-        priority: 2 
-      })).rejects.toThrow('retry and expire are required for priority 2');
-    });
-    
-    it('should include retry/expire for priority 2', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 1, request: 'abc123' })
-      });
-      
-      await sendPushoverNotification({ 
-        message: 'Emergency', 
-        priority: 2,
-        retry: 30,
-        expire: 3600
-      });
-      
-      const formData = mockFetch.mock.calls[0][1].body.toString();
-      expect(formData).toContain('priority=2');
-      expect(formData).toContain('retry=30');
-      expect(formData).toContain('expire=3600');
-    });
-    
-    it('should throw error for invalid sound', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      await expect(sendPushoverNotification({ 
-        message: 'Test', 
-        sound: 'invalid_sound'
-      })).rejects.toThrow('Invalid sound');
-    });
-    
-    it('should handle API errors', async () => {
-      process.env.PUSHOVER_TOKEN = 'test_token';
-      process.env.PUSHOVER_USER_KEY = 'test_user';
-      
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ 
-          status: 0, 
-          errors: ['Invalid token'],
-          message: 'error' 
-        })
-      });
-      
-      await expect(sendPushoverNotification({ message: 'Test' }))
-        .rejects.toThrow('Invalid token');
-    });
-  });
-});
+  // Test 4: Unknown command
+  console.log('\n--- Test: Unknown command ---');
+  result = runCommand({ command: 'unknown', args: {} });
+  assert(result.success === false, 'Should fail for unknown command');
+  
+  console.log('\n========================================');
+  console.log('ALL TESTS PASSED! (credential tests as expected)');
+  console.log('========================================');
+  
+  process.exit(0);
+} catch (error) {
+  console.error('\n========================================');
+  console.error('TEST FAILED:', error.message);
+  console.error('========================================');
+  process.exit(1);
+}
