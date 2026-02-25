@@ -1,0 +1,40 @@
+#!/bin/bash
+# SOP List - List all available SOPs
+
+SOP_DIR="${SOP_DIR:-$HOME/.thepopebot/sops}"
+DATA_DIR="${DATA_DIR:-$HOME/.thepopebot/sop-data}"
+
+# Ensure directories exist
+mkdir -p "$SOP_DIR" "$DATA_DIR"
+
+echo "Available SOPs:"
+echo "==============="
+echo ""
+
+if [ -d "$SOP_DIR" ]; then
+    for sop_file in "$SOP_DIR"/*.md; do
+        if [ -f "$sop_file" ]; then
+            filename=$(basename "$sop_file" .md)
+            
+            # Extract metadata using grep/sed
+            name=$(grep -m1 "^name:" "$sop_file" 2>/dev/null | sed 's/^name: *//' || echo "$filename")
+            description=$(grep -m1 "^description:" "$sop_file" 2>/dev/null | sed 's/^description: *//' || echo "No description")
+            priority=$(grep -m1 "^priority:" "$sop_file" 2>/dev/null | sed 's/^priority: *//' || echo "normal")
+            execution_mode=$(grep -m1 "^execution_mode:" "$sop_file" 2>/dev/null | sed 's/^execution_mode: *//' || echo "supervised")
+            
+            # Count steps
+            steps=$(grep -c "^## Step" "$sop_file" 2>/dev/null || echo "0")
+            
+            echo "  $name"
+            echo "    Description: $description"
+            echo "    Priority: $priority | Mode: $execution_mode | Steps: $steps"
+            echo ""
+        fi
+    done
+else
+    echo "No SOPs found. Create SOPs in $SOP_DIR/"
+    echo ""
+    echo "Example SOP location: $SOP_DIR/my-sop.md"
+fi
+
+echo "SOP Directory: $SOP_DIR"

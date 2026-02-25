@@ -1,0 +1,45 @@
+#!/bin/bash
+# Test email sending capability (with mock if no credentials)
+
+echo "========================================="
+echo "Testing Email Sending"
+echo "========================================="
+
+SMTP_USER="${SMTP_USER:-${POPEBOT_EMAIL_USER}}"
+SMTP_PASS="${SMTP_PASS:-${POPEBOT_EMAIL_PASS}}"
+
+if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ]; then
+    echo ""
+    echo "⚠️  No SMTP credentials found in environment"
+    echo "    (This is expected in the sandbox environment)"
+    echo ""
+    echo "Email will be sent when:"
+    echo "  1. POPEBOT_EMAIL_USER is set in .env"
+    echo "  2. POPEBOT_EMAIL_PASS (App Password) is set in .env"
+    echo ""
+    echo "To test, add to .env:"
+    echo "  POPEBOT_EMAIL_USER=yourbot@gmail.com"
+    echo "  POPEBOT_EMAIL_PASS=xxxx xxxx xxxx xxxx"
+    echo ""
+    echo "Alternatively, use the send_email tool from the skill:"
+    echo "  await context.tools.send_email({"
+    echo "    to: 'user@example.com',"
+    echo "    subject: 'Test',"
+    echo "    body: 'Hello!'"
+    echo "  })"
+    echo ""
+    echo "✓ Email test completed (mock - no credentials)"
+    exit 0
+fi
+
+# Actually try to send
+echo "Sending test email..."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+"$SCRIPT_DIR/send-email" "test@example.com" "Test Subject" "Test Body"
+
+if [ $? -eq 0 ]; then
+    echo "✓ Email sent successfully"
+else
+    echo "✗ Failed to send email"
+    exit 1
+fi

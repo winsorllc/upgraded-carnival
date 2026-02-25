@@ -1,0 +1,92 @@
+#!/bin/bash
+# SOP Create - Create a new SOP from template
+
+SOP_DIR="${SOP_DIR:-$HOME/.thepopebot/sops}"
+
+usage() {
+    echo "Usage: sop-create <name> [--description <desc>] [--mode <mode>]"
+    echo ""
+    echo "Arguments:"
+    echo "  <name>              Name of the SOP to create"
+    echo "  --description       Description (optional)"
+    echo "  --mode              Execution mode: auto, supervised, step_by_step (default: supervised)"
+    echo ""
+    echo "Example:"
+    echo "  sop-create deploy-frontend --description \"Deploy to staging\" --mode supervised"
+    exit 1
+}
+
+NAME=""
+DESCRIPTION="A new SOP"
+MODE="supervised"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --description)
+            DESCRIPTION="$2"
+            shift 2
+            ;;
+        --mode)
+            MODE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            if [ -z "$NAME" ]; then
+                NAME="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$NAME" ]; then
+    usage
+fi
+
+# Ensure directory exists
+mkdir -p "$SOP_DIR"
+
+# Check if already exists
+if [ -f "$SOP_DIR/$NAME.md" ]; then
+    echo "Error: SOP '$NAME' already exists"
+    exit 1
+fi
+
+# Create SOP from template
+cat > "$SOP_DIR/$NAME.md" << EOF
+---
+name: $NAME
+description: $DESCRIPTION
+version: "1.0.0"
+priority: normal
+execution_mode: $MODE
+triggers:
+  - type: manual
+---
+
+# $DESCRIPTION
+
+## Step 1: First Action
+\`\`\`bash
+echo "Executing first step..."
+\`\`\`
+
+## Step 2: Second Action
+\`\`\`bash
+echo "Executing second step..."
+\`\`\`
+
+## Step 3: Verify
+\`\`\`bash
+echo "Verifying results..."
+\`\`\`
+EOF
+
+echo "✓ Created SOP: $NAME"
+echo "Location: $SOP_DIR/$NAME.md"
+echo ""
+echo "Edit the SOP to add your steps, then run 'sop-list' to see it."

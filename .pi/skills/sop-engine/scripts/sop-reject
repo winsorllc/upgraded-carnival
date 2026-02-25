@@ -1,0 +1,69 @@
+#!/bin/bash
+# SOP Reject - Reject and cancel an SOP run
+
+set -e
+
+STATE_DIR="${STATE_DIR:-$HOME/.thepopebot/sop-state}"
+
+usage() {
+    echo "Usage: sop-reject <run-id> [--reason <reason>]"
+    echo ""
+    echo "Arguments:"
+    echo "  <run-id>   The ID of the SOP run to reject"
+    echo "  --reason   Reason for rejection (optional)"
+    exit 1
+}
+
+RUN_ID=""
+REASON=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --reason)
+            REASON="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$RUN_ID" ]; then
+                RUN_ID="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$RUN_ID" ]; then
+    usage
+fi
+
+STATE_FILE="$STATE_DIR/$RUN_ID.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Run '$RUN_ID' not found"
+    exit 1
+fi
+
+# Check current status
+STATUS=$(jq -r '.status' "$STATE_FILE")
+
+if [ "$STATUS" = "completed" ]; then
+    echo "Error: Run already completed"
+    exit 1
+fi
+
+# Reject the run - set status to rejected
+jq '.status = "rejected"' "$STATE_FILE" > "$STATE_DIR/$RUN_ID.tmp"
+mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_FILE"
+
+# Add rejection reason if provided
+if [ -n "$REASON" ]; then
+    CURRENT=$(cat "$STATE_FILE")
+    echo "$CURRENT" | jq --arg reason "$REASON" '.rejection_reason = $reason' > "$STATE_DIR/$RUN_ID.tmp"
+    mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_FILE"
+fi
+
+echo "✗ Rejected run $RUN_ID"
+if [ -n "$REASON" ]; then
+    echo "Reason: $REASON"
+fi

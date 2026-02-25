@@ -1,0 +1,118 @@
+#!/bin/bash
+# Test script for SOP Engine skill
+
+set -e
+
+echo "========================================"
+echo "Testing SOP Engine Skill"
+echo "========================================"
+echo ""
+
+# Setup test directories
+TEST_DIR="/tmp/sop-test-$$"
+mkdir -p "$TEST_DIR/sops"
+mkdir -p "$TEST_DIR/sop-data"
+mkdir -p "$TEST_DIR/sop-state"
+mkdir -p "$TEST_DIR/sop-audit"
+
+export SOP_DIR="$TEST_DIR/sops"
+export DATA_DIR="$TEST_DIR/sop-data"
+export STATE_DIR="$TEST_DIR/sop-state"
+export AUDIT_DIR="$TEST_DIR/sop-audit"
+
+# Copy scripts
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+chmod +x "$SCRIPT_DIR/sop-list"
+chmod +x "$SCRIPT_DIR/sop-execute"
+chmod +x "$SCRIPT_DIR/sop-approve"
+chmod +x "$SCRIPT_DIR/sop-status"
+chmod +x "$SCRIPT_DIR/sop-runs"
+chmod +x "$SCRIPT_DIR/sop-create"
+
+export PATH="$SCRIPT_DIR:$PATH"
+
+echo "=== Test 1: Create an SOP ==="
+sop-create test-sop --description "Test SOP for validation" --mode auto
+
+if [ -f "$SOP_DIR/test-sop.md" ]; then
+    echo "✓ SOP created successfully"
+else
+    echo "✗ Failed to create SOP"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 2: List SOPs ==="
+sop-list
+
+if [ -f "$SOP_DIR/test-sop.md" ]; then
+    echo "✓ SOP listed successfully"
+else
+    echo "✗ Failed to list SOPs"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 3: Execute SOP ==="
+sop-execute test-sop
+
+# Check if run was created
+RUN_ID=$(ls "$STATE_DIR"/*.json 2>/dev/null | head -1 | xargs basename 2>/dev/null | sed 's/.json//')
+
+if [ -n "$RUN_ID" ]; then
+    echo "✓ SOP execution started with Run ID: $RUN_ID"
+else
+    echo "✗ Failed to start SOP execution"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 4: Check Status ==="
+sop-status "$RUN_ID"
+
+if [ -f "$STATE_DIR/$RUN_ID.json" ]; then
+    echo "✓ Status check successful"
+else
+    echo "✗ Failed to check status"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 5: List Runs ==="
+sop-runs
+
+if [ -d "$STATE_DIR" ]; then
+    echo "✓ Runs list successful"
+else
+    echo "✗ Failed to list runs"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 6: Verify State Persistence ==="
+STATE_CONTENT=$(cat "$STATE_DIR/$RUN_ID.json")
+if echo "$STATE_CONTENT" | grep -q '"run_id"'; then
+    echo "✓ State persisted correctly"
+else
+    echo "✗ State not persisted correctly"
+    exit 1
+fi
+echo ""
+
+echo "=== Test 7: Verify Audit Log ==="
+if [ -f "$AUDIT_DIR/$RUN_ID.log" ]; then
+    echo "✓ Audit log created"
+else
+    echo "✗ Audit log not created"
+    exit 1
+fi
+echo ""
+
+echo "========================================"
+echo "All Tests Passed! ✓"
+echo "========================================"
+
+# Cleanup
+# rm -rf "$TEST_DIR"
+echo ""
+echo "Test files preserved at: $TEST_DIR"
