@@ -1,0 +1,23 @@
+{
+  "name": "robot-personality",
+  "version": "1.0.0",
+  "description": "Robot personality and safety system inspired by ZeroClaw",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test/personality.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.3.4",
+    "semver": "^7.5.4"
+  },
+  "keywords": [
+    "popebot",
+    "pi-skill",
+    "personality",
+    "safety",
+    "robot"
+  ],
+  "author": "PopeBot",
+  "license": "MIT"
+}
