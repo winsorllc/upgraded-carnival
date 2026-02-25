@@ -1,0 +1,23 @@
+{
+  "name": "code-intelligence",
+  "version": "1.0.0",
+  "description": "Semantic code search and codebase intelligence for PopeBot",
+  "main": "index.js",
+  "scripts": {
+    "index": "node index.js",
+    "search": "node search.js",
+    "deps": "node deps.js",
+    "impact": "node impact.js",
+    "ask": "node ask.js",
+    "test": "node test.js"
+  },
+  "keywords": ["code-analysis", "search", "intelligence", "dependencies"],
+  "dependencies": {
+    "sqlite3": "^5.1.6",
+    "minimatch": "^9.0.3",
+    "commander": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
