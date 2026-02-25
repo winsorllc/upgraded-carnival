@@ -1,0 +1,43 @@
+{
+  "name": "security-audit-pipeline",
+  "description": "Comprehensive security audit with parallel analysis",
+  "version": "1.0.0",
+  
+  "tasks": [
+    {
+      "agentType": "security-analyst",
+      "task": "Check for injection vulnerabilities (SQL, XSS, command injection)",
+      "context": { "focus": "injection-attacks", "severity": "critical" }
+    },
+    {
+      "agentType": "security-analyst",
+      "task": "Review authentication and authorization mechanisms",
+      "context": { "focus": "authn-authz", "check": "session-management" }
+    },
+    {
+      "agentType": "security-analyst",
+      "task": "Check data exposure and privacy risks",
+      "context": { "focus": "data-exposure", "sensitive-fields": true }
+    },
+    {
+      "agentType": "code-specialist",
+      "task": "Review for security anti-patterns and code smells",
+      "context": { "focus": "security-anti-patterns" }
+    }
+  ],
+  
+  "aggregateMode": "synthesize",
+  
+  "output": {
+    "format": "markdown",
+    "sections": [
+      "executive-summary",
+      "critical-findings",
+      "high-findings", 
+      "medium-findings",
+      "low-informational",
+      "recommendations",
+      "remediation-plan"
+    ]
+  }
+}

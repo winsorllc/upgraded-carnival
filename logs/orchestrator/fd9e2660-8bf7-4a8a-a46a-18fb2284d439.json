@@ -1,0 +1,17 @@
+{
+  "id": "fd9e2660-8bf7-4a8a-a46a-18fb2284d439",
+  "name": "test-session",
+  "createdAt": "2026-02-25T10:30:38.515Z",
+  "status": "completed",
+  "tasks": [
+    "task1",
+    "task2"
+  ],
+  "results": [
+    {
+      "success": true
+    }
+  ],
+  "timing": {},
+  "metadata": {}
+}

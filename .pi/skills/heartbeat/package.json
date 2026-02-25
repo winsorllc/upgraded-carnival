@@ -1,0 +1,16 @@
+{
+  "name": "@popebot/skill-heartbeat",
+  "version": "1.0.0",
+  "description": "Periodic self-monitoring and health check system for PopeBot agents",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test/test.js"
+  },
+  "keywords": ["popebot", "skill", "heartbeat", "monitoring", "health"],
+  "author": "PopeBot",
+  "license": "MIT",
+  "dependencies": {
+    "node-cron": "^3.0.3"
+  }
+}

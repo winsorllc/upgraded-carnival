@@ -1,0 +1,10 @@
+{
+  "name": "manual-health",
+  "runs": 1,
+  "lastRun": "2026-02-25T09:22:28.051Z",
+  "lastResult": {
+    "timestamp": "2026-02-25T09:22:28.038Z",
+    "status": "warning",
+    "type": "health"
+  }
+}

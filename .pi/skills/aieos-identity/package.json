@@ -1,0 +1,13 @@
+{
+  "name": "popebot-aieos-identity",
+  "version": "1.0.0",
+  "description": "AIEOS Identity Skill - Portable AI identity system for PopeBot",
+  "main": "aieos-validator.js",
+  "type": "module",
+  "scripts": {
+    "validate": "node aieos-validator.js",
+    "import": "node aieos-import.js",
+    "export": "node aieos-export.js"
+  },
+  "dependencies": {}
+}

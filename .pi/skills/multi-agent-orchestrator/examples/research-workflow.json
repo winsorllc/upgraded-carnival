@@ -1,0 +1,27 @@
+{
+  "name": "multi-perspective-research",
+  "description": "Research a topic from multiple angles using parallel agents",
+  "version": "1.0.0",
+  
+  "tasks": [
+    {
+      "agentType": "research-analyst",
+      "task": "Gather technical details and specifications"
+    },
+    {
+      "agentType": "research-analyst",
+      "task": "Research market context and use cases"
+    },
+    {
+      "agentType": "creative-writer",
+      "task": "Generate usage examples and scenarios"
+    }
+  ],
+  
+  "aggregateMode": "synthesize",
+  
+  "output": {
+    "format": "markdown",
+    "includeConfidenceScores": true
+  }
+}

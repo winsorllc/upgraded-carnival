@@ -1,0 +1,11 @@
+{
+  "name": "test-report",
+  "type": "report",
+  "interval": "1h",
+  "enabled": true,
+  "action": "default",
+  "created": "2026-02-25T09:22:23.267Z",
+  "runs": 0,
+  "lastRun": null,
+  "lastResult": null
+}

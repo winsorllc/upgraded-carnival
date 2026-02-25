@@ -1,0 +1,29 @@
+{
+  "name": "@popebot/skill-workflow-markdown",
+  "version": "1.0.0",
+  "description": "Execute markdown-based agent workflows with YAML frontmatter and executable code blocks",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "popebot-skill",
+    "workflows",
+    "markdown",
+    "literate-programming"
+  ],
+  "dependencies": {
+    "yaml": "^2.4.0",
+    "marked": "^12.0.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/bedrock-sdk": "*"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./parser": "./lib/parser.js",
+    "./executor": "./lib/executor.js",
+    "./workflows": "./lib/workflows.js"
+  }
+}

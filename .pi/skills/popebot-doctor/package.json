@@ -1,0 +1,26 @@
+{
+  "name": "popebot-doctor",
+  "version": "1.0.0",
+  "description": "Comprehensive diagnostics and health checking for the PopeBot/Pi agent environment",
+  "main": "index.js",
+  "bin": {
+    "popebot-doctor": "./bin/popebot-doctor.js",
+    "popebot-doctor-check": "./bin/popebot-doctor-check.js"
+  },
+  "scripts": {
+    "test": "node test/doctor.test.js"
+  },
+  "keywords": [
+    "popebot",
+    "pi-agent",
+    "diagnostics",
+    "health",
+    "monitoring",
+    "troubleshooting"
+  ],
+  "author": "PopeBot",
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.3.4"
+  }
+}
