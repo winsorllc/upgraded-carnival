@@ -1,252 +1,199 @@
 #!/usr/bin/env node
 
 /**
- * Test suite for SOP Workflow skill
+ * Test for SOP Workflow skill
  */
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { SopEngine } = require('./index.js');
 
-const TEST_DIR = path.join(__dirname, 'test-tmp');
-let SOP_DIR; // Will be set in setup()
+// Create temp test directories
+const testDir = '/tmp/sop-test-' + Date.now();
+const configDir = path.join(testDir, 'config');
+const stateDir = path.join(testDir, 'data', 'sops');
 
-// Setup test environment
-function setup() {
-  // Clean up any existing test directory
-  if (fs.existsSync(TEST_DIR)) {
-    fs.rmSync(TEST_DIR, { recursive: true, force: true });
+fs.mkdirSync(configDir, { recursive: true });
+fs.mkdirSync(stateDir, { recursive: true });
+
+// Create test SOP config
+const testSops = [
+  {
+    name: 'Test Deploy',
+    description: 'Test deployment SOP',
+    triggers: ['manual'],
+    steps: [
+      {
+        id: 'build',
+        name: 'Build',
+        action: { type: 'command', command: 'echo building' }
+      },
+      {
+        id: 'test',
+        name: 'Test',
+        action: { type: 'command', command: 'echo testing' }
+      },
+      {
+        id: 'approval',
+        name: 'Manual Approval',
+        type: 'approval',
+        approvers: ['@admin']
+      }
+    ],
+    on_failure: 'rollback'
   }
-  fs.mkdirSync(TEST_DIR, { recursive: true });
-  process.chdir(TEST_DIR);
+];
+
+fs.writeFileSync(path.join(configDir, 'SOPS.json'), JSON.stringify(testSops, null, 2));
+
+async function runTests() {
+  console.log('🧪 Testing SOP Workflow skill...\n');
   
-  // Set absolute path for SOP_DIR after TEST_DIR is created
-  SOP_DIR = path.join(TEST_DIR, '.sops');
-  process.env.SOP_DIR = SOP_DIR;
-  console.log('✓ Test environment set up (SOP_DIR: ' + SOP_DIR + ')');
-}
+  let passed = 0;
+  let failed = 0;
 
-function runCommand(args) {
-  const env = { ...process.env, SOP_DIR };
-  const argsStr = JSON.stringify(args.args);
-  const cmd = `node ${path.join(__dirname, 'sop-cli.js')} ${args.command} '${argsStr.replace(/'/g, "'\\''")}'`;
-  console.log('Running:', cmd);
-  const result = execSync(cmd, { encoding: 'utf-8', env });
-  return JSON.parse(result);
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    console.error(`✗ FAILED: ${message}`);
-    process.exit(1);
-  }
-  console.log(`✓ ${message}`);
-}
-
-// Test 1: Create an SOP
-function testCreateSop() {
-  console.log('\n--- Test: Create SOP ---');
-  
-  const result = runCommand({
-    command: 'create',
-    args: {
-      name: 'test-deployment',
-      description: 'Test deployment SOP',
-      priority: 'high',
-      triggers: ['manual', 'webhook'],
-      steps: [
-        { title: 'Build', body: 'Build the project', requires_confirmation: false },
-        { title: 'Deploy', body: 'Deploy to staging', requires_confirmation: true },
-        { title: 'Verify', body: 'Verify deployment', requires_confirmation: false }
-      ]
-    }
+  const engine = new SopEngine({ 
+    sopsDir: configDir, 
+    stateDir: stateDir 
   });
-  
-  assert(result.success === true, 'SOP should be created successfully');
-  assert(result.output.includes('test-deployment'), 'Output should mention SOP name');
-  assert(result.output.includes('3 steps'), 'Output should show step count');
-  
-  // Verify file was created
-  const sopFile = path.join(SOP_DIR, 'test-deployment.json');
-  assert(fs.existsSync(sopFile), 'SOP file should exist');
-  
-  console.log('SOP created and verified!');
-}
 
-// Test 2: List SOPs
-function testListSops() {
-  console.log('\n--- Test: List SOPs ---');
-  
-  const result = runCommand({ command: 'list', args: {} });
-  
-  assert(result.success === true, 'List should succeed');
-  assert(result.output.includes('test-deployment'), 'Should show our test SOP');
-  assert(result.output.includes('high'), 'Should show priority');
-  
-  console.log('SOP list works!');
-}
-
-// Test 3: List with filter
-function testListWithFilter() {
-  console.log('\n--- Test: List with filter ---');
-  
-  const result = runCommand({ 
-    command: 'list', 
-    args: { filter: 'high' } 
-  });
-  
-  assert(result.success === true, 'Filtered list should succeed');
-  assert(result.output.includes('test-deployment'), 'Should show filtered result');
-  
-  // Test non-matching filter
-  const noResult = runCommand({ 
-    command: 'list', 
-    args: { filter: 'nonexistent' } 
-  });
-  
-  assert(noResult.output.includes('No SOPs found'), 'Should handle no matches');
-  
-  console.log('Filter works!');
-}
-
-// Test 4: Execute SOP
-function testExecuteSop() {
-  console.log('\n--- Test: Execute SOP ---');
-  
-  const result = runCommand({ 
-    command: 'execute', 
-    args: { name: 'test-deployment' } 
-  });
-  
-  assert(result.success === true, 'Execution should start');
-  assert(result.run_id, 'Should return a run ID');
-  assert(result.output.includes('Build') || result.output.includes('Step 1'), 'Should mention first step');
-  
-  // Save run ID for other tests
-  fs.writeFileSync(path.join(TEST_DIR, 'last-run-id.txt'), result.run_id);
-  
-  console.log('SOP execution works!');
-  return result.run_id;
-}
-
-// Test 5: Check status
-function testStatusSop(runId) {
-  console.log('\n--- Test: Status SOP ---');
-  
-  const result = runCommand({ 
-    command: 'status', 
-    args: { run_id: runId } 
-  });
-  
-  assert(result.success === true, 'Status should succeed');
-  assert(result.output.includes('test-deployment'), 'Should show SOP name');
-  assert(result.output.includes('Step') || result.output.includes('Build'), 'Should show current step');
-  assert(result.output.includes('pending'), 'Should show pending status');
-  
-  console.log('SOP status works!');
-}
-
-// Test 6: Approve step
-function testApproveStep(runId) {
-  console.log('\n--- Test: Approve Step ---');
-  
-  const result = runCommand({ 
-    command: 'approve', 
-    args: { run_id: runId } 
-  });
-  
-  assert(result.success === true, 'Approval should succeed');
-  assert(result.output.includes('approved'), 'Should confirm approval');
-  
-  console.log('SOP approval works!');
-}
-
-// Test 7: Advance step
-function testAdvanceStep(runId) {
-  console.log('\n--- Test: Advance Step ---');
-  
-  const result = runCommand({ 
-    command: 'advance', 
-    args: { run_id: runId } 
-  });
-  
-  assert(result.success === true, 'Advance should succeed');
-  assert(result.output.includes('step 2'), 'Should advance to step 2');
-  
-  console.log('SOP advance works!');
-}
-
-// Test 8: Complete SOP
-function testCompleteSop(runId) {
-  console.log('\n--- Test: Complete SOP ---');
-  
-  // First approve
-  runCommand({ command: 'approve', args: { run_id: runId } });
-  
-  // Then advance to step 3 (final step)
-  let result = runCommand({ command: 'advance', args: { run_id: runId } });
-  assert(result.success === true, 'Advance to step 3 should succeed');
-  
-  // Approve and advance to completion
-  runCommand({ command: 'approve', args: { run_id: runId } });
-  result = runCommand({ command: 'advance', args: { run_id: runId } });
-  
-  assert(result.success === true, 'Complete should succeed');
-  assert(result.output.includes('completed'), 'Should show completion');
-  
-  console.log('SOP completion works!');
-}
-
-// Test 9: Error handling
-function testErrorHandling() {
-  console.log('\n--- Test: Error Handling ---');
-  
-  // Missing name
-  let result = runCommand({ command: 'create', args: {} });
-  assert(result.success === false, 'Should fail without name');
-  
-  // Unknown SOP
-  result = runCommand({ command: 'execute', args: { name: 'nonexistent' } });
-  assert(result.success === false, 'Should fail for nonexistent SOP');
-  
-  // Unknown run ID
-  result = runCommand({ command: 'status', args: { run_id: 'fake-id' } });
-  assert(result.success === false, 'Should fail for nonexistent run');
-  
-  console.log('Error handling works!');
-}
-
-// Main test runner
-function runTests() {
-  console.log('========================================');
-  console.log('SOP Workflow Skill - Test Suite');
-  console.log('========================================');
-  
+  // Test 1: Load SOPs
   try {
-    setup();
-    testCreateSop();
-    testListSops();
-    testListWithFilter();
-    const runId = testExecuteSop();
-    testStatusSop(runId);
-    testApproveStep(runId);
-    testAdvanceStep(runId);
-    testCompleteSop(runId);
-    testErrorHandling();
+    const sops = engine.loadSops();
+    if (sops.length === 1 && sops[0].name === 'Test Deploy') {
+      console.log('✅ Test 1: Load SOPs');
+      passed++;
+    } else {
+      throw new Error('SOP not loaded correctly');
+    }
+  } catch (e) {
+    console.log('❌ Test 1:', e.message);
+    failed++;
+  }
+
+  // Test 2: List SOPs
+  try {
+    const list = engine.listSops();
+    if (list.length === 1 && list[0].steps === 3) {
+      console.log('✅ Test 2: List SOPs');
+      passed++;
+    } else {
+      throw new Error('List mismatch');
+    }
+  } catch (e) {
+    console.log('❌ Test 2:', e.message);
+    failed++;
+  }
+
+  // Test 3: Get SOP by name
+  try {
+    const sop = engine.getSop('Test Deploy');
+    if (sop && sop.steps && sop.steps.length === 3) {
+      console.log('✅ Test 3: Get SOP by name');
+      passed++;
+    } else {
+      throw new Error('SOP not found');
+    }
+  } catch (e) {
+    console.log('❌ Test 3:', e.message);
+    failed++;
+  }
+
+  // Test 4: Get non-existent SOP
+  try {
+    const sop = engine.getSop('NonExistent');
+    if (!sop) {
+      console.log('✅ Test 4: Get non-existent SOP returns null');
+      passed++;
+    } else {
+      throw new Error('Should have returned null');
+    }
+  } catch (e) {
+    console.log('❌ Test 4:', e.message);
+    failed++;
+  }
+
+  // Test 5: Start a run (mock execution)
+  try {
+    // Override executeSteps to avoid actual execution
+    engine.executeSteps = async () => {};
     
-    console.log('\n========================================');
-    console.log('ALL TESTS PASSED! ✓');
-    console.log('========================================');
+    const run = await engine.startRun('Test Deploy');
+    if (run && run.runId && run.status === 'running') {
+      console.log('✅ Test 5: Start SOP run');
+      passed++;
+    } else {
+      throw new Error('Run not started correctly');
+    }
+  } catch (e) {
+    console.log('❌ Test 5:', e.message);
+    failed++;
+  }
+
+  // Test 6: Approve step
+  try {
+    // Create a pending run
+    engine.activeRuns.clear();
+    engine.executeSteps = async () => {};
     
-    // Cleanup
-    process.chdir('/');
-    fs.rmSync(TEST_DIR, { recursive: true, force: true });
+    const run = await engine.startRun('Test Deploy');
+    const approved = engine.approveStep(run.runId, 'approval');
     
-    process.exit(0);
-  } catch (error) {
-    console.error('\n========================================');
-    console.error('TEST FAILED:', error.message);
-    console.error('========================================');
+    if (approved && approved.approval && approved.approval.approved === true) {
+      console.log('✅ Test 6: Approve step');
+      passed++;
+    } else {
+      throw new Error('Approval not recorded');
+    }
+  } catch (e) {
+    console.log('❌ Test 6:', e.message);
+    failed++;
+  }
+
+  // Test 7: Reject step
+  try {
+    engine.activeRuns.clear();
+    engine.executeSteps = async () => {};
+    
+    const run = await engine.startRun('Test Deploy');
+    const rejected = engine.rejectStep(run.runId, 'approval', 'Not ready');
+    
+    if (rejected && rejected.approval.approved === false && rejected.status === 'rejected') {
+      console.log('✅ Test 7: Reject step');
+      passed++;
+    } else {
+      throw new Error('Rejection not recorded');
+    }
+  } catch (e) {
+    console.log('❌ Test 7:', e.message);
+    failed++;
+  }
+
+  // Test 8: Cancel run
+  try {
+    engine.activeRuns.clear();
+    engine.executeSteps = async () => {};
+    
+    const run = await engine.startRun('Test Deploy');
+    const cancelled = engine.cancelRun(run.runId);
+    
+    if (cancelled && cancelled.status === 'cancelled') {
+      console.log('✅ Test 8: Cancel run');
+      passed++;
+    } else {
+      throw new Error('Cancellation not recorded');
+    }
+  } catch (e) {
+    console.log('❌ Test 8:', e.message);
+    failed++;
+  }
+
+  // Cleanup
+  fs.rmSync(testDir, { recursive: true, force: true });
+
+  console.log(`\n📊 Results: ${passed} passed, ${failed} failed`);
+  
+  if (failed > 0) {
     process.exit(1);
   }
 }

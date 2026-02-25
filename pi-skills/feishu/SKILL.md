@@ -1,117 +1,110 @@
 ---
 name: feishu
-description: Send messages and manage webhooks for Feishu/Lark (ByteDance's enterprise communication platform).
+description: Interact with Lark/Feishu APIs for messaging, documents, and collaboration. Use when you need to send messages, manage documents, or integrate with Lark/Feishu workspace.
 metadata:
   {
-    "zeroclaw":
+    "thepopebot":
       {
-        "emoji": "✈️",
+        "emoji": "🏢",
+        "os": ["linux", "darwin"],
         "requires": { "env": ["FEISHU_APP_ID", "FEISHU_APP_SECRET"] },
-      },
+        "install": []
+      }
   }
 ---
 
-# Feishu / Lark
+# Lark/Feishu API Integration
 
-Send messages and manage webhooks for Feishu (飞书), ByteDance's enterprise communication platform.
+Use the Feishu (Lark) Open API to send messages, manage documents, and interact with your workspace.
 
-## When to Use
+## Setup
 
-✅ **USE this skill when:**
+1. Create an app at https://open.feishu.cn/
+2. Get App ID and App Secret
+3. Set permissions:
+   - `im:message:send_as_bot`
+   - `im:message:receive`
+   - `doc:readonly`
+   - `drive:drive`
+4. Invite the app to a chat or space
 
-- Sending notifications to Feishu/Lark channels
-- Integrating with ByteDance enterprise tools
-- Building workflows with Feishu bots
-
-## When NOT to Use
-
-❌ **DON'T use this skill when:**
-
-- Non-enterprise communication (use Slack, Discord)
-- Consumer messaging (use Telegram, WhatsApp)
-
-## Requirements
-
-Set these environment variables:
-- `FEISHU_APP_ID` — Your Feishu application ID
-- `FEISHU_APP_SECRET` — Your Feishu application secret
-
-Or use webhook URL directly for simple integrations.
-
-## Usage
-
-### Webhook (Simplest)
+## Environment Variables
 
 ```bash
-# Send text message via webhook
-curl -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/WEBHOOK_ID" \
+FEISHU_APP_ID=your_app_id
+FEISHU_APP_SECRET=your_app_secret
+```
+
+## Send Messages
+
+### Send text message to chat
+
+```bash
+# Get access token first
+curl -X POST "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal" \
   -H "Content-Type: application/json" \
-  -d '{"msg_type": "text", "content": {"text": "Hello!"}}'
+  -d '{"app_id":"'$FEISHU_APP_ID'","app_secret":"'$FEISHU_APP_SECRET'"}'
+
+# Send message (use open_id, user_id, or chat_id)
+curl -X POST "https://open.feishu.cn/open-apis/im/v1/messages" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "receive_id": "ou_xxxxx",
+    "msg_type": "text",
+    "content": "{\"text\":\"Hello from the agent!\"}"
+  }'
 ```
 
-### Rich Messages
+### Send rich text (post)
 
-```json
-{
-  "msg_type": "post",
-  "content": {
-    "post": {
-      "zh_cn": {
-        "title": "Notification",
-        "content": [[{"tag": "text", "text": "Bold text"}]]
-      }
-    }
-  }
-}
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/im/v1/messages" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "receive_id": "ou_xxxxx",
+    "msg_type": "post",
+    "content": "{\"post\":{\"zh_cn\":{\"title\":\"Title\",\"content\":[[{\"tag\":\"text\",\"text\":\"Bold text\"}]]}}}"
+  }'
 ```
 
-### Interactive Cards
+## Documents
 
-```json
-{
-  "msg_type": "interactive",
-  "card": {
-    "header": {
-      "title": {"tag": "plain_text", "content": "Alert"},
-      "template": "red"
-    },
-    "elements": [
-      {
-        "tag": "action",
-        "actions": [
-          {
-            "tag": "button",
-            "text": {"tag": "plain_text", "content": "View"},
-            "type": "primary",
-            "url": "https://example.com"
-          }
-        ]
-      }
-    ]
-  }
-}
+### Create a document
+
+```bash
+curl -X POST "https://open.feishu.cn/open-apis/doc/v3/documents/" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"document_request":{"title":"My Document"}}'
 ```
 
-### Message Types
+### Get document content
 
-| Type | Description |
-|------|-------------|
-| `text` | Plain text |
-| `post` | Rich post with formatting |
-| `image` | Image by image_key |
-| `interactive` | Card with buttons/inputs |
-| `share_chat` | Share to group |
+```bash
+curl -X GET "https://open.feishu.cn/open-apis/doc/v3/documents/$DOC_ID/content" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-## Bot Events
+## Users
 
-Subscribe to events:
-- `im.message.receive_v1` — Message received
-- `im.message.message_read_v1` — Message read
-- `contact.user.created` — User added
+### Get user info
+
+```bash
+curl -X GET "https://open.feishu.cn/open-apis/contact/v3/users/$USER_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### List users
+
+```bash
+curl -X GET "https://open.feishu.cn/open-apis/contact/v3/users?department_id=0" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ## Notes
 
-- Feishu = 飞书 (Chinese version)
-- Lark = International version
-- Both use same API with different base URLs
-- Rate limit: 100 requests/second for webhooks
+- Token expires in 2 hours - implement refresh logic for long-running tasks
+- Use `open_id` for users in the same app
+- Chat IDs start with `oc_`, user IDs with `ou_`
