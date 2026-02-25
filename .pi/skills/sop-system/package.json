@@ -1,0 +1,17 @@
+{
+  "name": "sop-system",
+  "version": "1.0.0",
+  "description": "Standard Operating Procedure system for PopeBot",
+  "main": "sop.js",
+  "bin": {
+    "sop": "./cli.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "node-fetch": "^3.3.2",
+    "cron": "^3.1.0"
+  }
+}
