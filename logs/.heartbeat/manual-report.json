@@ -1,0 +1,10 @@
+{
+  "name": "manual-report",
+  "runs": 1,
+  "lastRun": "2026-02-25T09:22:32.300Z",
+  "lastResult": {
+    "timestamp": "2026-02-25T09:22:32.297Z",
+    "status": "unknown",
+    "type": "report"
+  }
+}
