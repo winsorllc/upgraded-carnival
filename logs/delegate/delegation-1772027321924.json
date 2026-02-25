@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "agent": "summarizer",
+  "result": "SUMMARY:\n\nThis is a concise summary of the provided content.\nKey points:\n• Main point 1\n• Main point 2\n• Main point 3\n\nConclusion: Brief wrap-up statement.",
+  "duration_ms": 724,
+  "tokens_used": {
+    "prompt": 91,
+    "completion": 39
+  },
+  "model": "gemini-2.0-flash-lite",
+  "provider": "google"
+}

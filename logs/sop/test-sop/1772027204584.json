@@ -1,0 +1,42 @@
+{
+  "sop": "test-sop",
+  "version": "1.0.0",
+  "started_at": "2026-02-25T13:46:44.569Z",
+  "completed_at": "2026-02-25T13:46:44.584Z",
+  "duration_ms": 15,
+  "status": "completed",
+  "vars": {},
+  "steps": [
+    {
+      "number": 1,
+      "title": "Initialize Test",
+      "result": "success"
+    },
+    {
+      "number": 2,
+      "title": "Check Environment",
+      "result": "skipped"
+    },
+    {
+      "number": 3,
+      "title": "Create Test File",
+      "result": "success"
+    },
+    {
+      "number": 4,
+      "title": "Run Validation",
+      "result": "success"
+    },
+    {
+      "number": 5,
+      "title": "Completion Step",
+      "result": "success"
+    }
+  ],
+  "metrics": {
+    "total_steps": 5,
+    "completed": 8,
+    "skipped": 2,
+    "failed": 0
+  }
+}

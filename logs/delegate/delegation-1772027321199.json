@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "agent": "research",
+  "result": "RESEARCH RESULTS for: \"Find information about Node.js performance\"\n\n1. Source: Example Research Paper\n   Summary: Key findings related to the query...\n\n2. Source: Technical Documentation\n   Summary: Relevant technical details...\n\n3. Source: Industry Analysis\n   Summary: Market trends and insights...",
+  "duration_ms": 86,
+  "tokens_used": {
+    "prompt": 11,
+    "completion": 75
+  },
+  "model": "gpt-4o-mini",
+  "provider": "openai"
+}

@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-zA-Z]+$",
+      "description": "User name"
+    },
+    "age": {
+      "$ref": "#/$defs/Age"
+    },
+    "status": {
+      "anyOf": [
+        { "const": "active" },
+        { "const": "inactive" },
+        { "const": "pending" }
+      ]
+    },
+    "metadata": {
+      "type": ["string", "null"]
+    }
+  },
+  "$defs": {
+    "Age": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 150,
+      "description": "Age in years"
+    }
+  },
+  "required": ["name"]
+}
