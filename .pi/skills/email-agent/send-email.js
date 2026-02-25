@@ -50,21 +50,21 @@ except Exception as e:
 
         try {
             // Execute Python strictly, passing secrets securely via env to avoid argument injection
-            const cmd = \`echo "\${scriptBase64}" | base64 -d | python3 - "\${user}" "\${finalSubject}" "\${body}" "\${to}"\`;
-      const { stdout, stderr } = await execPromise(cmd, {
-        env: { ...process.env, SMTP_PASS: pass }
-      });
+            const cmd = `echo "${scriptBase64}" | base64 -d | python3 - "${user}" "${finalSubject}" "${body}" "${to}"`;
+            const { stdout, stderr } = await execPromise(cmd, {
+                env: { ...process.env, SMTP_PASS: pass }
+            });
 
-      return {
-        success: true,
-        message: \`Email successfully sent to \${to}\`,
-      };
+            return {
+                success: true,
+                message: `Email successfully sent to ${to}`,
+            };
 
-    } catch (error) {
-      console.error("Failed to send email via SMTP:", error);
-      throw new Error(\`SMTP Error while sending to \${to}: \${error.message}\` + (error.stderr || ''));
+        } catch (error) {
+            console.error("Failed to send email via SMTP:", error);
+            throw new Error(`SMTP Error while sending to ${to}: ${error.message}` + (error.stderr || ''));
+        }
     }
-  }
 };
 
 module.exports = sendEmailSkill;
