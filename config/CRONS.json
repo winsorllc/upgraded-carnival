@@ -59,7 +59,7 @@
     "name": "repo-scan-glm5",
     "schedule": "20 20 * * *",
     "type": "agent",
-    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY new ideas as you can as PopeBot skills in your sandbox (.pi/skills/). For EACH skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of good ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every skill you built, your test results for each, and code samples.",
+    "job": "FIRST: List all existing skills in .pi/skills/ and note their names — DO NOT rebuild any skill that already exists there. THEN: Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY NEW ideas as you can that DO NOT already exist in .pi/skills/. For EACH new skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of new ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every NEW skill you built, your test results for each, and code samples.",
     "llm_provider": "custom",
     "llm_model": "glm-5",
     "enabled": true
@@ -68,7 +68,7 @@
     "name": "repo-scan-minimax",
     "schedule": "30 20 * * *",
     "type": "agent",
-    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY new ideas as you can as PopeBot skills in your sandbox (.pi/skills/). For EACH skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of good ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every skill you built, your test results for each, and code samples.",
+    "job": "FIRST: List all existing skills in .pi/skills/ and note their names — DO NOT rebuild any skill that already exists there. THEN: Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY NEW ideas as you can that DO NOT already exist in .pi/skills/. For EACH new skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of new ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every NEW skill you built, your test results for each, and code samples.",
     "llm_provider": "custom",
     "llm_model": "minimax-m2.5",
     "enabled": true
@@ -77,7 +77,7 @@
     "name": "repo-scan-kimi",
     "schedule": "40 20 * * *",
     "type": "agent",
-    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY new ideas as you can as PopeBot skills in your sandbox (.pi/skills/). For EACH skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of good ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every skill you built, your test results for each, and code samples.",
+    "job": "FIRST: List all existing skills in .pi/skills/ and note their names — DO NOT rebuild any skill that already exists there. THEN: Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY NEW ideas as you can that DO NOT already exist in .pi/skills/. For EACH new skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of new ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every NEW skill you built, your test results for each, and code samples.",
     "llm_provider": "custom",
     "llm_model": "kimi-k2.5",
     "enabled": true
@@ -86,7 +86,7 @@
     "name": "repo-scan-qwen",
     "schedule": "50 20 * * *",
     "type": "agent",
-    "job": "Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY new ideas as you can as PopeBot skills in your sandbox (.pi/skills/). For EACH skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of good ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every skill you built, your test results for each, and code samples.",
+    "job": "FIRST: List all existing skills in .pi/skills/ and note their names — DO NOT rebuild any skill that already exists there. THEN: Scan https://github.com/zeroclaw-labs/zeroclaw, https://github.com/openclaw/openclaw, and https://github.com/stephengpope/thepopebot for new tools, skills, and architectures. Implement AS MANY NEW ideas as you can that DO NOT already exist in .pi/skills/. For EACH new skill: create the SKILL.md, write the implementation code, and write and run a test to prove it works. Do not stop at one skill — keep going until you run out of new ideas or time. After you have built and tested everything, use the send_email tool to email winsorllc@yahoo.com a comprehensive progress report listing every NEW skill you built, your test results for each, and code samples.",
     "llm_provider": "custom",
     "llm_model": "qwen3.5:397b",
     "enabled": true
