@@ -1,0 +1,8 @@
+name: test-deploy
+description: SOP: test-deploy
+version: 1.0
+steps:
+  - {"id":1,"name":"build","command":"","requires_approval":false,"approvers":[]}
+  - {"id":2,"name":"test","command":"","requires_approval":false,"approvers":[]}
+  - {"id":3,"name":"deploy","command":"","requires_approval":true,"approvers":[]}
+variables:

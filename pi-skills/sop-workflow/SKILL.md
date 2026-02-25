@@ -1,145 +1,174 @@
 ---
 name: sop-workflow
-description: Manage Standard Operating Procedures (SOPs) - structured multi-step workflows with approvals, conditions, and automation. Use when you need to define and execute repeatable business processes with checkpoints and human approval gates.
-metadata:
-  {
-    "thepopebot":
-      {
-        "emoji": "📋",
-        "os": ["linux", "darwin"],
-        "requires": { "files": ["config/SOPS.json"] },
-        "install": []
-      }
-  }
+description: Standard Operating Procedure workflow execution with approval gates. Define multi-step procedures, execute them with state management, and require human approval at specified checkpoints. Inspired by ZeroClaw's SOP system.
+version: 1.0.0
+author: zeroclaw-inspired
+tags:
+  - workflow
+  - sop
+  - approval
+  - procedure
+  - automation
+capabilities:
+  - Define SOPs with steps and approval gates
+  - Execute SOPs with state tracking
+  - Require approval before critical steps
+  - Resume SOPs from checkpoints
+  - Track SOP execution history
+requires: []
+environment:
+  SOP_DIR: "./sops"
+  SOP_STATE_DIR: "./sop-state"
 ---
 
-# SOP Workflow Manager
+# SOP Workflow Skill
 
-Define and execute Standard Operating Procedures (SOPs) with structured workflows, conditions, approvals, and automation.
-
-## Overview
-
-SOPs are defined in `config/SOPS.json` and executed via this skill. Each SOP has:
-- **Triggers**: When to start (manual, webhook, schedule**: Ordered)
-- **Steps actions with conditions
-- **Approval gates**: Human approval required before proceeding
-- **Rollback**: Automatic or manual rollback on failure
-
-## Configuration (config/SOPS.json)
-
-```json
-[
-  {
-    "name": "Deploy Production",
-    "description": "Deploy application to production with approval gates",
-    "triggers": ["manual", "webhook"],
-    "steps": [
-      {
-        "id": "validate",
-        "name": "Validate Build",
-        "action": { "type": "command", "command": "npm run build" },
-        "timeout": 300
-      },
-      {
-        "id": "approval_dev",
-        "name": "Dev Lead Approval",
-        "type": "approval",
-        "approvers": ["@devlead"],
-        "timeout": 3600
-      },
-      {
-        "id": "deploy_staging",
-        "name": "Deploy to Staging",
-        "action": { "type": "agent", "job": "Deploy to staging environment" }
-      },
-      {
-        "id": "smoke_test",
-        "name": "Smoke Tests",
-        "type": "test",
-        "action": { "type": "command", "command": "npm run test:smoke" }
-      },
-      {
-        "id": "approval_prod",
-        "name": "Production Approval",
-        "type": "approval",
-        "approvers": ["@release-manager"],
-        "timeout": 7200
-      },
-      {
-        "id": "deploy_prod",
-        "name": "Deploy to Production",
-        "action": { "type": "agent", "job": "Deploy to production with blue-green" }
-      }
-    ],
-    "on_failure": "rollback",
-    "max_concurrent": 1,
-    "cooldown_seconds": 300
-  }
-]
-```
+This skill provides Standard Operating Procedure (SOP) workflow execution with approval gates. It allows defining multi-step procedures, executing them with state management, and requiring human approval at specified checkpoints.
 
 ## Commands
 
-### List SOPs
+### Create a new SOP
+```
+sop create <name> --steps <step1,step2,...> --approvals <step1,step3,...>
+```
+Creates a new SOP with specified steps and approval gates.
 
-```bash
+### List all SOPs
+```
 sop list
 ```
+Lists all available SOPs.
 
-### Start an SOP
-
-```bash
-sop start <sop-name> [--param key=value]
+### Show SOP details
 ```
+sop show <name>
+```
+Shows the details of a specific SOP including steps and approval gates.
+
+### Execute an SOP
+```
+sop execute <name> [--vars KEY=VALUE,...]
+```
+Executes an SOP from the beginning or resumes from the last checkpoint.
+
+### Approve an SOP step
+```
+sop approve <name> --step <step_number> [--notes <approval_notes>]
+```
+Manually approve a gated step in an SOP.
+
+### Reject an SOP step
+```
+sop reject <name> --step <step_number> --reason <reason>
+```
+Reject a step and optionally halt the SOP.
 
 ### Check SOP status
+```
+sop status <name>
+```
+Shows the current status of an SOP execution including pending approvals.
 
-```bash
-sop status <run-id>
+### Get pending approvals
+```
+sop pending
+```
+Lists all SOPs and steps that require approval.
+
+## SOP Format
+
+SOPs are defined in YAML format:
+
+```yaml
+name: Deploy Application
+description: Production deployment procedure
+version: "1.0"
+
+# Steps define the procedure
+steps:
+  - id: 1
+    name: Pre-deployment checks
+    command: ./scripts/pre-deploy-check.sh
+    requires_approval: false
+
+  - id: 2
+    name: Build artifact
+    command: npm run build
+    requires_approval: false
+
+  - id: 3
+    name: Deploy to staging
+    command: ./scripts/deploy.sh staging
+    requires_approval: true
+    approvers:
+      - deploy-lead
+      - security-team
+
+  - id: 4
+    name: Verify staging
+    command: ./scripts/verify.sh staging
+    requires_approval: false
+
+  - id: 5
+    name: Deploy to production
+    command: ./scripts/deploy.sh production
+    requires_approval: true
+    approvers:
+      - deploy-lead
+      - security-team
+      - product-owner
+
+# Variables that can be passed at execution time
+variables:
+  - name: ENVIRONMENT
+    required: true
+    default: staging
+  - name: VERSION
+    required: true
 ```
 
-### Approve a step
+## State Management
 
+The skill maintains state in `sop-state/`:
+- `<sop-name>.json` - Current execution state
+- `<sop-name>.history.jsonl` - Execution history
+
+State includes:
+- Current step
+- Completed steps with outputs
+- Pending approvals
+- Variables passed at execution
+- Start/end timestamps
+
+## Approval Workflow
+
+1. When an SOP reaches a step with `requires_approval: true`, execution pauses
+2. The step's output is captured but not applied
+3. Approvers are notified (via configured channels)
+4. An approver must run `sop approve` or `sop reject`
+5. On approval, execution continues to the next step
+6. On rejection, execution halts (can be resumed after addressing issues)
+
+## Examples
+
+Create an SOP for code review and deployment:
 ```bash
-sop approve <run-id> <step-id> [--comment "LGTM"]
+sop create deploy-prod \
+  --steps "build,test,security-scan,staging-deploy,staging-verify,prod-deploy" \
+  --approvals "security-scan,prod-deploy"
 ```
 
-### Reject a step
-
+Execute with variables:
 ```bash
-sop reject <run-id> <step-id> --comment "Fix the tests first"
+sop execute deploy-prod --vars VERSION=v1.2.3,ENVIRONMENT=production
 ```
 
-### Cancel an SOP run
-
+Approve a step:
 ```bash
-sop cancel <run-id>
+sop approve deploy-prod --step 3 --notes "Security scan passed, approved for staging"
 ```
 
-### Show SOP definition
-
+Check status:
 ```bash
-sop show <sop-name>
+sop status deploy-prod
 ```
-
-## Step Types
-
-| Type | Description |
-|------|-------------|
-| `action` | Execute command, agent task, or webhook |
-| `approval` | Require human approval to proceed |
-| `condition` | Check condition before proceeding |
-| `parallel` | Execute multiple steps in parallel |
-| `delay` | Wait for specified duration |
-
-## Environment Variables
-
-- `SOPS_DIR`: Directory containing SOP definitions (default: `config/`)
-- `SOPS_STATE_DIR`: Directory for run state (default: `data/sops/`)
-
-## Notes
-
-- Approval requests can be sent to Telegram, Slack, or email
-- All steps are logged with timestamps
-- Supports rollback on failure (configurable per SOP)
-- Runs can be resumed after approval

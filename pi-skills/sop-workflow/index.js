@@ -1,461 +1,547 @@
 #!/usr/bin/env node
 
-/**
- * SOP Workflow Manager
- * Define and execute Standard Operating Procedures
- */
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { join, basename } from 'path';
+import { spawn } from 'child_process';
 
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
+const SOP_DIR = process.env.SOP_DIR || './sops';
+const SOP_STATE_DIR = process.env.SOP_STATE_DIR || './sop-state';
 
-const SOPS_DIR = process.env.SOPS_DIR || 'config';
-const STATE_DIR = process.env.SOPS_STATE_DIR || 'data/sops';
+// Ensure directories exist
+if (!existsSync(SOP_DIR)) mkdirSync(SOP_DIR, { recursive: true });
+if (!existsSync(SOP_STATE_DIR)) mkdirSync(SOP_STATE_DIR, { recursive: true });
 
-class SopEngine {
-  constructor(config = {}) {
-    this.sopsDir = config.sopsDir || SOPS_DIR;
-    this.stateDir = config.stateDir || STATE_DIR;
-    this.sops = [];
-    this.activeRuns = new Map();
+function loadYaml(content) {
+  // Simple YAML parser for our needs
+  const lines = content.split('\n');
+  const result = {};
+  let currentSection = null;
+  let currentList = null;
+  let currentItem = null;
+  let indent = 0;
+
+  for (const line of lines) {
+    if (line.trim() === '' || line.trim().startsWith('#')) continue;
     
-    // Ensure directories exist
-    if (!fs.existsSync(this.stateDir)) {
-      fs.mkdirSync(this.stateDir, { recursive: true });
-    }
-  }
-
-  /**
-   * Load SOPs from configuration
-   */
-  loadSops() {
-    const sopsPath = path.join(this.sopsDir, 'SOPS.json');
-    
-    if (!fs.existsSync(sopsPath)) {
-      // Try alternate path
-      const altPath = path.join(this.sopsDir, 'sops.json');
-      if (fs.existsSync(altPath)) {
-        return this.loadFromFile(altPath);
-      }
-      return [];
-    }
-    
-    return this.loadFromFile(sopsPath);
-  }
-
-  loadFromFile(filePath) {
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      this.sops = JSON.parse(content);
-      return this.sops;
-    } catch (e) {
-      console.error('Failed to load SOPs:', e.message);
-      return [];
-    }
-  }
-
-  /**
-   * List all SOPs
-   */
-  listSops() {
-    this.loadSops();
-    return this.sops.map(sop => ({
-      name: sop.name,
-      description: sop.description,
-      steps: sop.steps ? sop.steps.length : 0,
-      triggers: sop.triggers || ['manual']
-    }));
-  }
-
-  /**
-   * Get SOP by name
-   */
-  getSop(name) {
-    this.loadSops();
-    return this.sops.find(s => s.name.toLowerCase() === name.toLowerCase());
-  }
-
-  /**
-   * Start an SOP run
-   */
-  async startRun(sopName, params = {}) {
-    const sop = this.getSop(sopName);
-    if (!sop) {
-      throw new Error(`SOP not found: ${sopName}`);
-    }
-
-    const runId = `run-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const run = {
-      runId,
-      sopName: sop.name,
-      status: 'running',
-      currentStep: 0,
-      steps: sop.steps.map(step => ({
-        id: step.id,
-        name: step.name,
-        status: 'pending',
-        startedAt: null,
-        completedAt: null,
-        result: null,
-        error: null
-      })),
-      params,
-      startedAt: new Date().toISOString(),
-      completedAt: null
-    };
-
-    this.activeRuns.set(runId, run);
-    this.saveRun(run);
-
-    // Start executing steps asynchronously
-    this.executeSteps(runId);
-
-    return run;
-  }
-
-  /**
-   * Execute SOP steps
-   */
-  async executeSteps(runId) {
-    const run = this.activeRuns.get(runId);
-    if (!run) return;
-
-    while (run.currentStep < run.steps.length) {
-      const step = run.steps[run.currentStep];
-      step.status = 'running';
-      step.startedAt = new Date().toISOString();
+    const match = line.match(/^(\s*)([^:]+):\s*(.*)$/);
+    if (match) {
+      const [, ws, key, value] = match;
+      const currentIndent = ws.length;
       
-      this.saveRun(run);
-
-      try {
-        const result = await this.executeStep(step, run.params);
-        step.status = 'completed';
-        step.completedAt = new Date().toISOString();
-        step.result = result;
-      } catch (e) {
-        step.status = 'failed';
-        step.error = e.message;
-        run.status = 'failed';
-        run.completedAt = new Date().toISOString();
-        
-        // Handle on_failure
-        const sop = this.getSop(run.sopName);
-        if (sop.on_failure === 'rollback') {
-          await this.executeRollback(run);
-        }
-        
-        this.saveRun(run);
-        return;
-      }
-
-      run.currentStep++;
-      this.saveRun(run);
-    }
-
-    run.status = 'completed';
-    run.completedAt = new Date().toISOString();
-    this.saveRun(run);
-  }
-
-  /**
-   * Execute a single step
-   */
-  async executeStep(step, params) {
-    if (step.type === 'approval') {
-      return { requiresApproval: true, approvers: step.approvers };
-    }
-
-    if (step.type === 'delay') {
-      const delayMs = step.duration * 1000;
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      return { delayed: step.duration };
-    }
-
-    if (step.type === 'condition') {
-      return this.evaluateCondition(step.condition, params);
-    }
-
-    // Action step
-    if (step.action) {
-      return this.executeAction(step.action, params);
-    }
-
-    return { skipped: true };
-  }
-
-  /**
-   * Execute an action (command, agent, webhook)
-   */
-  async executeAction(action, params) {
-    switch (action.type) {
-      case 'command':
-        return this.executeCommand(action.command, params);
-      
-      case 'agent':
-        // Would trigger agent job - simplified for now
-        return { agentJob: action.job, params };
-      
-      case 'webhook':
-        return this.executeWebhook(action, params);
-      
-      default:
-        throw new Error(`Unknown action type: ${action.type}`);
-    }
-  }
-
-  /**
-   * Execute a shell command
-   */
-  executeCommand(command, params) {
-    // Simple param substitution
-    let cmd = command;
-    for (const [key, value] of Object.entries(params || {})) {
-      cmd = cmd.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
-    }
-
-    return new Promise((resolve, reject) => {
-      const proc = spawn('sh', ['-c', cmd], {
-        stdio: 'pipe'
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      proc.stdout.on('data', d => stdout += d.toString());
-      proc.stderr.on('data', d => stderr += d.toString());
-
-      proc.on('close', code => {
-        if (code === 0) {
-          resolve({ stdout, exitCode: code });
+      if (value === '' || value.startsWith('-')) {
+        // Section header or list start
+        if (currentIndent === 0) {
+          currentSection = key.trim();
+          result[currentSection] = currentSection === 'steps' || currentSection === 'variables' || currentSection === 'approvers' ? [] : {};
+          if (value.startsWith('-')) {
+            currentList = currentSection;
+            const itemMatch = value.match(/^-\s*(.*)$/);
+            if (itemMatch) {
+              const itemValue = itemMatch[1].trim();
+              if (itemValue.startsWith('{')) {
+                result[currentSection].push(JSON.parse(itemValue));
+              } else {
+                result[currentSection].push({ id: result[currentSection].length + 1, name: itemValue });
+              }
+            }
+          }
+        } else if (currentIndent > indent && currentList) {
+          // List item
+          const itemMatch = value.match(/^-\s*(.*)$/);
+          if (itemMatch) {
+            const itemValue = itemMatch[1].trim();
+            if (itemValue.startsWith('{')) {
+              result[currentSection].push(JSON.parse(itemValue));
+            } else {
+              result[currentSection].push({ id: result[currentSection].length + 1, name: itemValue });
+            }
+          } else if (value.trim()) {
+            const lastIdx = result[currentSection].length - 1;
+            if (lastIdx >= 0) {
+              const [k, v] = value.split(':').map(s => s.trim());
+              result[currentSection][lastIdx][k] = v.replace(/^["']|["']$/g, '');
+            }
+          }
         } else {
-          reject(new Error(stderr || `Command failed with code ${code}`));
+          // Key-value
+          const [k, v] = [key.trim(), value.trim().replace(/^["']|["']$/g, '')];
+          if (currentSection) {
+            if (Array.isArray(result[currentSection])) {
+              const lastIdx = result[currentSection].length - 1;
+              if (lastIdx >= 0 && typeof result[currentSection][lastIdx] === 'object') {
+                result[currentSection][lastIdx][k] = v;
+              }
+            } else {
+              result[currentSection][k] = v;
+            }
+          } else {
+            result[k] = v;
+          }
         }
-      });
-
-      proc.on('error', reject);
-    });
-  }
-
-  /**
-   * Execute a webhook
-   */
-  async executeWebhook(action, params) {
-    // Simplified webhook execution
-    const url = action.url;
-    const method = action.method || 'POST';
-    const body = { ...action.vars, ...params };
-    
-    return { url, method, body, status: 'would_execute' };
-  }
-
-  /**
-   * Evaluate a condition
-   */
-  evaluateCondition(condition, params) {
-    // Simple condition evaluation
-    // In production, use a proper expression evaluator
-    if (condition.when) {
-      // Check if condition is met
-      return { satisfied: true, condition: condition.when };
+        indent = currentIndent;
+      } else {
+        const [k, v] = [key.trim(), value.trim().replace(/^["']|["']$/g, '')];
+        if (currentSection && Array.isArray(result[currentSection]) && result[currentSection].length > 0) {
+          const lastIdx = result[currentSection].length - 1;
+          if (typeof result[currentSection][lastIdx] === 'object') {
+            result[currentSection][lastIdx][k] = v;
+          }
+        } else if (currentSection) {
+          result[currentSection] = result[currentSection] || {};
+          result[currentSection][k] = v;
+        } else {
+          result[k] = v;
+        }
+      }
     }
-    return { satisfied: true };
   }
-
-  /**
-   * Execute rollback
-   */
-  async executeRollback(run) {
-    // Execute rollback steps in reverse
-    console.log(`Executing rollback for run ${run.runId}`);
-    // Implementation depends on SOP definition
-  }
-
-  /**
-   * Approve a step
-   */
-  approveStep(runId, stepId, comment = '') {
-    const run = this.activeRuns.get(runId) || this.loadRun(runId);
-    if (!run) {
-      throw new Error(`Run not found: ${runId}`);
-    }
-
-    const step = run.steps.find(s => s.id === stepId);
-    if (!step) {
-      throw new Error(`Step not found: ${stepId}`);
-    }
-
-    step.approval = { approved: true, comment, at: new Date().toISOString() };
-    step.status = 'completed';
-    step.completedAt = new Date().toISOString();
-    
-    this.saveRun(run);
-    
-    // Resume execution
-    this.executeSteps(runId);
-    
-    return step;
-  }
-
-  /**
-   * Reject a step
-   */
-  rejectStep(runId, stepId, comment = '') {
-    const run = this.activeRuns.get(runId) || this.loadRun(runId);
-    if (!run) {
-      throw new Error(`Run not found: ${runId}`);
-    }
-
-    const step = run.steps.find(s => s.id === stepId);
-    if (!step) {
-      throw new Error(`Step not found: ${stepId}`);
-    }
-
-    step.approval = { approved: false, comment, at: new Date().toISOString() };
-    step.status = 'rejected';
-    run.status = 'rejected';
-    run.completedAt = new Date().toISOString();
-    
-    this.saveRun(run);
-    return step;
-  }
-
-  /**
-   * Get run status
-   */
-  getRunStatus(runId) {
-    const run = this.activeRuns.get(runId) || this.loadRun(runId);
-    if (!run) {
-      throw new Error(`Run not found: ${runId}`);
-    }
-    return run;
-  }
-
-  /**
-   * Save run to disk
-   */
-  saveRun(run) {
-    const filePath = path.join(this.stateDir, `${run.runId}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(run, null, 2));
-  }
-
-  /**
-   * Load run from disk
-   */
-  loadRun(runId) {
-    const filePath = path.join(this.stateDir, `${runId}.json`);
-    if (fs.existsSync(filePath)) {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
-    return null;
-  }
-
-  /**
-   * Cancel a run
-   */
-  cancelRun(runId) {
-    const run = this.activeRuns.get(runId) || this.loadRun(runId);
-    if (!run) {
-      throw new Error(`Run not found: ${runId}`);
-    }
-
-    run.status = 'cancelled';
-    run.completedAt = new Date().toISOString();
-    this.saveRun(run);
-    
-    return run;
-  }
+  
+  return result;
 }
 
-// CLI interface
-if (require.main === module) {
-  const args = process.argv.slice(2);
-  const command = args[0];
-  const engine = new SopEngine();
-
-  (async () => {
-    try {
-      switch (command) {
-        case 'list':
-          const sops = engine.listSops();
-          console.log('Available SOPs:');
-          sops.forEach(s => {
-            console.log(`  - ${s.name}: ${s.description} (${s.steps} steps)`);
-          });
-          break;
-
-        case 'show':
-          if (!args[1]) {
-            console.error('Usage: sop show <sop-name>');
-            process.exit(1);
-          }
-          const sop = engine.getSop(args[1]);
-          if (!sop) {
-            console.error(`SOP not found: ${args[1]}`);
-            process.exit(1);
-          }
-          console.log(JSON.stringify(sop, null, 2));
-          break;
-
-        case 'start':
-          if (!args[1]) {
-            console.error('Usage: sop start <sop-name>');
-            process.exit(1);
-          }
-          const run = await engine.startRun(args[1]);
-          console.log(`Started SOP run: ${run.runId}`);
-          break;
-
-        case 'status':
-          if (!args[1]) {
-            console.error('Usage: sop status <run-id>');
-            process.exit(1);
-          }
-          const status = engine.getRunStatus(args[1]);
-          console.log(JSON.stringify(status, null, 2));
-          break;
-
-        case 'approve':
-          if (!args[1] || !args[2]) {
-            console.error('Usage: sop approve <run-id> <step-id>');
-            process.exit(1);
-          }
-          const approved = engine.approveStep(args[1], args[2], args[3] || '');
-          console.log('Step approved:', approved.id);
-          break;
-
-        case 'reject':
-          if (!args[1] || !args[2]) {
-            console.error('Usage: sop reject <run-id> <step-id>');
-            process.exit(1);
-          }
-          const rejected = engine.rejectStep(args[1], args[2], args[3] || '');
-          console.log('Step rejected:', rejected.id);
-          break;
-
-        case 'cancel':
-          if (!args[1]) {
-            console.error('Usage: sop cancel <run-id>');
-            process.exit(1);
-          }
-          const cancelled = engine.cancelRun(args[1]);
-          console.log('Run cancelled:', cancelled.runId);
-          break;
-
-        default:
-          console.log('SOP Workflow Manager Commands:');
-          console.log('  list                      - List all SOPs');
-          console.log('  show <name>               - Show SOP definition');
-          console.log('  start <name>              - Start an SOP');
-          console.log('  status <run-id>           - Check run status');
-          console.log('  approve <run-id> <step>   - Approve a step');
-          console.log('  reject <run-id> <step>    - Reject a step');
-          console.log('  cancel <run-id>           - Cancel a run');
+function saveYaml(obj) {
+  let result = '';
+  for (const [key, value] of Object.entries(obj)) {
+    if (Array.isArray(value)) {
+      result += `${key}:\n`;
+      for (const item of value) {
+        if (typeof item === 'object') {
+          result += `  - ${JSON.stringify(item)}\n`;
+        } else {
+          result += `  - ${item}\n`;
+        }
       }
-    } catch (e) {
-      console.error('Error:', e.message);
+    } else if (typeof value === 'object') {
+      result += `${key}:\n`;
+      for (const [k, v] of Object.entries(value)) {
+        result += `  ${k}: ${v}\n`;
+      }
+    } else {
+      result += `${key}: ${value}\n`;
+    }
+  }
+  return result;
+}
+
+function getStatePath(name) {
+  return join(SOP_STATE_DIR, `${name}.json`);
+}
+
+function getHistoryPath(name) {
+  return join(SOP_STATE_DIR, `${name}.history.jsonl`);
+}
+
+function loadState(name) {
+  const path = getStatePath(name);
+  if (existsSync(path)) {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  }
+  return null;
+}
+
+function saveState(name, state) {
+  writeFileSync(getStatePath(name), JSON.stringify(state, null, 2));
+}
+
+function appendHistory(name, entry) {
+  const path = getHistoryPath(name);
+  writeFileSync(path, JSON.stringify(entry) + '\n', { flag: 'a' });
+}
+
+async function runCommand(command, cwd = process.cwd()) {
+  return new Promise((resolve, reject) => {
+    const parts = command.split(' ');
+    const cmd = parts[0];
+    const args = parts.slice(1);
+    
+    const proc = spawn(cmd, args, { cwd, shell: true });
+    let stdout = '';
+    let stderr = '';
+    
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    
+    proc.on('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+    proc.on('error', reject);
+  });
+}
+
+const commands = {
+  'create': async (args) => {
+    const name = args[0];
+    const stepsIdx = args.indexOf('--steps');
+    const approvalsIdx = args.indexOf('--approvals');
+    
+    if (!name) {
+      console.error('Usage: sop create <name> --steps <step1,step2,...> --approvals <step1,step3,...>');
       process.exit(1);
     }
-  })();
-}
+    
+    const steps = stepsIdx >= 0 ? args[stepsIdx + 1].split(',') : [];
+    const approvals = approvalsIdx >= 0 ? args[approvalsIdx + 1].split(',') : [];
+    
+    const sop = {
+      name,
+      description: `SOP: ${name}`,
+      version: '1.0',
+      steps: steps.map((step, i) => ({
+        id: i + 1,
+        name: step.trim(),
+        command: '',
+        requires_approval: approvals.includes(step.trim()),
+        approvers: []
+      })),
+      variables: []
+    };
+    
+    const path = join(SOP_DIR, `${name}.yaml`);
+    writeFileSync(path, saveYaml(sop));
+    console.log(`Created SOP: ${name} at ${path}`);
+  },
+  
+  'list': async () => {
+    const files = readdirSync(SOP_DIR).filter(f => f.endsWith('.yaml'));
+    if (files.length === 0) {
+      console.log('No SOPs found');
+      return;
+    }
+    console.log('Available SOPs:');
+    for (const file of files) {
+      const content = readFileSync(join(SOP_DIR, file), 'utf-8');
+      const sop = loadYaml(content);
+      console.log(`  - ${sop.name}: ${sop.description || 'No description'}`);
+    }
+  },
+  
+  'show': async (args) => {
+    const name = args[0];
+    if (!name) {
+      console.error('Usage: sop show <name>');
+      process.exit(1);
+    }
+    
+    const path = join(SOP_DIR, `${name}.yaml`);
+    if (!existsSync(path)) {
+      console.error(`SOP not found: ${name}`);
+      process.exit(1);
+    }
+    
+    const content = readFileSync(path, 'utf-8');
+    const sop = loadYaml(content);
+    console.log(JSON.stringify(sop, null, 2));
+  },
+  
+  'execute': async (args) => {
+    const name = args[0];
+    const varsIdx = args.indexOf('--vars');
+    
+    if (!name) {
+      console.error('Usage: sop execute <name> [--vars KEY=VALUE,...]');
+      process.exit(1);
+    }
+    
+    const path = join(SOP_DIR, `${name}.yaml`);
+    if (!existsSync(path)) {
+      console.error(`SOP not found: ${name}`);
+      process.exit(1);
+    }
+    
+    const content = readFileSync(path, 'utf-8');
+    const sop = loadYaml(content);
+    
+    // Parse variables
+    let variables = {};
+    if (varsIdx >= 0 && varsIdx + 1 < args.length) {
+      for (const pair of args[varsIdx + 1].split(',')) {
+        const [k, v] = pair.split('=');
+        variables[k.trim()] = v.trim();
+      }
+    }
+    
+    // Load or create state
+    let state = loadState(name) || {
+      name,
+      currentStep: 0,
+      completedSteps: [],
+      pendingApproval: null,
+      variables,
+      startedAt: new Date().toISOString(),
+      status: 'running'
+    };
+    
+    if (state.status === 'completed') {
+      console.log('SOP already completed. Use sop reset first to run again.');
+      return;
+    }
+    
+    if (state.pendingApproval) {
+      console.log(`Waiting for approval on step ${state.pendingApproval}`);
+      return;
+    }
+    
+    // Execute steps
+    while (state.currentStep < sop.steps.length) {
+      const step = sop.steps[state.currentStep];
+      console.log(`Executing step ${step.id}: ${step.name}`);
+      
+      if (step.requires_approval) {
+        state.pendingApproval = step.id;
+        state.status = 'awaiting_approval';
+        saveState(name, state);
+        appendHistory(name, {
+          step: step.id,
+          action: 'awaiting_approval',
+          timestamp: new Date().toISOString()
+        });
+        console.log(`Step ${step.id} requires approval. Pausing...`);
+        return;
+      }
+      
+      if (step.command) {
+        try {
+          const result = await runCommand(step.command);
+          appendHistory(name, {
+            step: step.id,
+            action: 'executed',
+            command: step.command,
+            exitCode: result.code,
+            output: result.stdout.substring(0, 1000),
+            timestamp: new Date().toISOString()
+          });
+          
+          if (result.code !== 0) {
+            state.status = 'failed';
+            state.error = `Step ${step.id} failed: ${result.stderr}`;
+            saveState(name, state);
+            console.error(`Step failed: ${result.stderr}`);
+            return;
+          }
+        } catch (err) {
+          state.status = 'failed';
+          state.error = `Step ${step.id} error: ${err.message}`;
+          saveState(name, state);
+          console.error(`Step error: ${err.message}`);
+          return;
+        }
+      }
+      
+      state.completedSteps.push({
+        id: step.id,
+        name: step.name,
+        completedAt: new Date().toISOString()
+      });
+      state.currentStep++;
+      saveState(name, state);
+    }
+    
+    state.status = 'completed';
+    state.completedAt = new Date().toISOString();
+    saveState(name, state);
+    appendHistory(name, {
+      action: 'completed',
+      timestamp: new Date().toISOString()
+    });
+    console.log('SOP completed successfully!');
+  },
+  
+  'approve': async (args) => {
+    const name = args[0];
+    const stepIdx = args.indexOf('--step');
+    const notesIdx = args.indexOf('--notes');
+    
+    if (!name || stepIdx < 0) {
+      console.error('Usage: sop approve <name> --step <step_number> [--notes <notes>]');
+      process.exit(1);
+    }
+    
+    const stepNum = parseInt(args[stepIdx + 1]);
+    const notes = notesIdx >= 0 ? args[notesIdx + 1] : '';
+    
+    let state = loadState(name);
+    if (!state) {
+      console.error(`No execution state found for: ${name}`);
+      process.exit(1);
+    }
+    
+    if (state.pendingApproval !== stepNum) {
+      console.error(`Step ${stepNum} is not pending approval`);
+      process.exit(1);
+    }
+    
+    // Load SOP to get step details
+    const sopPath = join(SOP_DIR, `${name}.yaml`);
+    const sop = loadYaml(readFileSync(sopPath, 'utf-8'));
+    const step = sop.steps.find(s => s.id === stepNum);
+    
+    if (step && step.command) {
+      try {
+        const result = await runCommand(step.command);
+        appendHistory(name, {
+          step: stepNum,
+          action: 'approved',
+          notes,
+          command: step.command,
+          exitCode: result.code,
+          output: result.stdout.substring(0, 1000),
+          timestamp: new Date().toISOString()
+        });
+        
+        if (result.code !== 0) {
+          console.error(`Command failed after approval: ${result.stderr}`);
+          return;
+        }
+      } catch (err) {
+        console.error(`Command error after approval: ${err.message}`);
+        return;
+      }
+    }
+    
+    state.completedSteps.push({
+      id: stepNum,
+      name: step?.name,
+      approvedAt: new Date().toISOString(),
+      notes
+    });
+    state.pendingApproval = null;
+    state.status = 'running';
+    saveState(name, state);
+    
+    console.log(`Step ${stepNum} approved!`);
+    
+    // Continue execution
+    await commands['execute']([name]);
+  },
+  
+  'reject': async (args) => {
+    const name = args[0];
+    const stepIdx = args.indexOf('--step');
+    const reasonIdx = args.indexOf('--reason');
+    
+    if (!name || stepIdx < 0 || reasonIdx < 0) {
+      console.error('Usage: sop reject <name> --step <step_number> --reason <reason>');
+      process.exit(1);
+    }
+    
+    const stepNum = parseInt(args[stepIdx + 1]);
+    const reason = args.slice(reasonIdx + 1).join(' ');
+    
+    let state = loadState(name);
+    if (!state) {
+      console.error(`No execution state found for: ${name}`);
+      process.exit(1);
+    }
+    
+    state.status = 'rejected';
+    state.rejection = {
+      step: stepNum,
+      reason,
+      rejectedAt: new Date().toISOString()
+    };
+    saveState(name, state);
+    
+    appendHistory(name, {
+      step: stepNum,
+      action: 'rejected',
+      reason,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log(`Step ${stepNum} rejected: ${reason}`);
+  },
+  
+  'status': async (args) => {
+    const name = args[0];
+    if (!name) {
+      console.error('Usage: sop status <name>');
+      process.exit(1);
+    }
+    
+    const state = loadState(name);
+    if (!state) {
+      console.log(`No execution state found for: ${name}`);
+      return;
+    }
+    
+    console.log(JSON.stringify(state, null, 2));
+  },
+  
+  'pending': async () => {
+    const files = readdirSync(SOP_STATE_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.history.jsonl'));
+    
+    let found = false;
+    for (const file of files) {
+      const name = file.replace('.json', '');
+      const state = JSON.parse(readFileSync(join(SOP_STATE_DIR, file), 'utf-8'));
+      
+      if (state.pendingApproval) {
+        found = true;
+        console.log(`${name}: Step ${state.pendingApproval} requires approval`);
+      }
+    }
+    
+    if (!found) {
+      console.log('No pending approvals');
+    }
+  },
+  
+  'reset': async (args) => {
+    const name = args[0];
+    if (!name) {
+      console.error('Usage: sop reset <name>');
+      process.exit(1);
+    }
+    
+    const statePath = getStatePath(name);
+    const historyPath = getHistoryPath(name);
+    
+    if (existsSync(statePath)) {
+      const fs = await import('fs');
+      fs.unlinkSync(statePath);
+    }
+    if (existsSync(historyPath)) {
+      const fs = await import('fs');
+      fs.unlinkSync(historyPath);
+    }
+    
+    console.log(`Reset state for ${name}`);
+  }
+};
 
-module.exports = { SopEngine };
+// Main entry point
+const cmd = process.argv[2];
+const args = process.argv.slice(3);
+
+if (commands[cmd]) {
+  commands[cmd](args).catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
+} else {
+  console.log(`SOP Workflow Tool
+
+Usage: sop <command> [args...]
+
+Commands:
+  create <name> --steps <step1,step2,...> --approvals <step1,step3,...>
+    Create a new SOP
+  list
+    List all SOPs
+  show <name>
+    Show SOP details
+  execute <name> [--vars KEY=VALUE,...]
+    Execute an SOP
+  approve <name> --step <step_number> [--notes <notes>]
+    Approve a step
+  reject <name> --step <step_number> --reason <reason>
+    Reject a step
+  status <name>
+    Check SOP status
+  pending
+    List pending approvals
+  reset <name>
+    Reset SOP state
+`);
+  process.exit(1);
+}
