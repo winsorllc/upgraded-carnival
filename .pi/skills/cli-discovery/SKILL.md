@@ -1,0 +1,1 @@
+﻿/job/pi-skills/cli-discovery
