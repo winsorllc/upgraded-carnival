@@ -1,5 +1,6 @@
 // Test all 4 Ollama Cloud models: identity check + 500-word essay
-const API_KEY = "5c308e8a1a294775993d466d6a6bcad2.9whN6hD3vkHJBYh-K-sujIDM";
+const API_KEY = process.env.OLLAMA_API_KEY;
+if (!API_KEY) { console.error("Set OLLAMA_API_KEY env var first"); process.exit(1); }
 const BASE_URL = "https://ollama.com/v1";
 const fs = await import('fs');
 

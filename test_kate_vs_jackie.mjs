@@ -2,7 +2,8 @@
 // We give Kate Jackie's SKILL.md and ask her to write a BETTER version
 const fs = await import('fs');
 
-const API_KEY = "5c308e8a1a294775993d466d6a6bcad2.9whN6hD3vkHJBYh-K-sujIDM";
+const API_KEY = process.env.OLLAMA_API_KEY;
+if (!API_KEY) { console.error("Set OLLAMA_API_KEY env var first"); process.exit(1); }
 const BASE_URL = "https://ollama.com/v1";
 
 const jackieSystemInfo = fs.readFileSync("d:\\dev_aiwinsor\\popebot_agent\\.pi\\skills\\system-info\\SKILL.md", "utf-8");

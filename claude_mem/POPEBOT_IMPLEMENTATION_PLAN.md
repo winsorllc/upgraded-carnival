@@ -1,5 +1,5 @@
 # PopeBot Agent — Operations Manual & Handoff Document
-**Version:** 2.0 (Updated from Implementation Plan v1.0)  
+**Version:** 2.1 (Corrected after self-critique)  
 **Last Updated:** 2026-02-25  
 **Author:** Antigravity (Architecture + Operations Sessions)  
 **Status:** ✅ PHASE 1-2 COMPLETE — Agents deployed, skills built, benchmarked
@@ -12,7 +12,7 @@
 
 ### Current State (as of 2026-02-25):
 - **3 active agents** (Jackie, Mimi, Kate) — 1 shelved (Gwen)
-- **112 skills** built and consolidated on `main` branch
+- **102 skills** (with SKILL.md) across 103 directories on `main` branch
 - **Repository:** `winsorllc/upgraded-carnival` (PUBLIC — unlimited free Actions minutes)
 - **Cron jobs:** Currently DISABLED (all `"enabled": false`)
 - **Cost:** $20/month (Ollama Cloud subscription only)
@@ -163,27 +163,33 @@ docker run --rm -e GH_TOKEN=<token> popebot_agent-event-handler:latest sh -c '<c
 
 ## 4. Skills Inventory
 
-### 4.1 Current Count: 112 skills on `main`
-All skills are in `.pi/skills/<skill-name>/SKILL.md` format.
+### 4.1 Current Count (Verified 2026-02-25)
+- **103 skill directories** in `.pi/skills/`
+- **102 SKILL.md files** (the `tests/` directory has no SKILL.md)
+- **69 skills with implementation code** (index.js, watch.sh, etc.)
+- **33 skills with SKILL.md only** (documentation/spec but no runnable code)
 
 ### 4.2 Skill Quality Tiers (based on content analysis)
 
 **Tier 1 — Production-Grade (written by Kate/Mimi):**
 - `hybrid-memory` (10.5K) — Multi-layer memory system
 - `cost-tracker` (6.4K) — Budget alerts, cost attribution
-- `spotify-player` (7.7K) — Full playback control with helper functions
-- `http-request` (8.0K) — Comprehensive HTTP client
-- `weather` (6.5K) — Multi-provider weather data
+- `spotify-player` (7.9K) — Full playback control with helper functions ← **Mimi's upgrade survived merge**
 - `code-analyzer` (7.7K) — Static analysis
 
-**Tier 2 — Solid (written by Jackie/Mimi):**
-- `file-watcher` (4.8K) — Native bash with inotifywait, daemon mode, debouncing
-- `notion` (7.2K) — Deep Notion API integration
-- `session-logs` (4.3K) — Session management
-- `trello` (6.0K) — Trello board management
+**⚠️ MERGE DOWNGRADE WARNING:** When merging PRs #14 and #15, we used `git merge -X theirs` which silently overwrote some superior skill versions:
+- `weather` was **downgraded** from 6,511 bytes (Kate's) → 2,484 bytes (Mimi's simpler version)
+- `http-request` was **downgraded** from 8,069 bytes → 3,349 bytes
+- These could be restored from earlier commits if needed (see §12)
 
-**Tier 3 — Basic but functional:**
-- Most remaining skills — functional SKILL.md + basic implementation
+**Tier 2 — Solid (written by Jackie/Mimi):**
+- `file-watcher` (5.0K) — Native bash with inotifywait, daemon mode, debouncing
+- `notion` (5.1K) — Notion API integration
+- `session-logs` (4.3K) — Session management
+- `trello-ops` — Trello board management
+
+**Tier 3 — SKILL.md only (no implementation code):**
+- 33 skills have documentation but no runnable scripts. They serve as specs for future implementation.
 
 ### 4.3 Duplicate Prevention
 All skills were consolidated from both `.pi/skills/` and `pi-skills/` (some agents used the wrong path) into `.pi/skills/` only. The job description now includes a dedup instruction that agents must follow.
@@ -222,7 +228,9 @@ When given Jackie's `system-info` skill (303 words) and asked to improve it, Kat
 - Container awareness (Docker/K8s detection)
 - Edge cases section, exit codes, JSON schema versioning
 
-**Conclusion:** Kate genuinely improves skills — she's not copying.
+**Conclusion:** Kate genuinely improves skills when given a baseline.
+
+**⚠️ Methodology caveat:** This test explicitly asked Kate to "write a BETTER version." Any competent LLM will add more sections when told to improve. The stronger evidence for Kate's independent quality is her PR #17 output: 10 unique skills, 0 duplicates, all conceived from scratch without a baseline to copy or expand from.
 
 ---
 
@@ -245,20 +253,25 @@ When given Jackie's `system-info` skill (303 words) and asked to improve it, Kat
 ## 7. Known Issues & Gotchas
 
 ### 7.1 Critical
-- **PAT exposure:** An earlier GitHub PAT was committed to the repo. It was revoked and a new one generated. Always use GitHub Secrets, never commit tokens.
-- **Gwen is broken:** `qwen3.5:397b` consistently returns empty responses. Shelved permanently.
+- **PAT exposure:** An earlier GitHub PAT was committed to the repo history. It was revoked and a new one generated. The current PAT is also embedded in the local git remote URL (`git remote -v` will show it). Always use GitHub Secrets for CI, never commit tokens.
+- **Gwen assessment:** `qwen3.5:397b` returned empty responses on all tests (2 prompts via API, 2 PR runs). **Caveat:** We only tested with 2 prompts and default settings. The 397B model may have different rate limits, timeouts, or content filtering. The "broken" diagnosis could be an API-level issue rather than a model defect. Consider retesting with higher `max_tokens`, different prompts, or checking raw HTTP response bodies before permanently decommissioning.
 
 ### 7.2 Operational
 - **Event handler crashes:** The `thepopebot-event-handler` Docker container crashes on Next.js startup. It needs `docker start` before each use. The gh CLI inside still works.
 - **pi-skills vs .pi/skills:** Some agents create skills in `pi-skills/` instead of `.pi/skills/`. We consolidated everything into `.pi/skills/` and the dedup instruction references that path.
 - **Token limit on essays:** Kate and Jackie hit the 1500 token limit before finishing longer content. Increase `max_tokens` for complex tasks.
+- **Merge downgrades:** Using `git merge -X theirs` to merge PRs silently overwrote some superior skill versions with inferior ones. Future merges should compare file sizes/content before using `-X theirs`.
 - **Merge conflicts:** When merging PRs locally, symlink conflicts can occur (e.g., `.pi/skills/file-watcher~pr14`). Resolve with `git rm -f <conflict-file>` then commit.
+- **Agent attribution is fragile:** After merging, the git history doesn't cleanly attribute which agent wrote which skill. Attribution requires cross-referencing job UUIDs in branch names with run logs. No agent-name tags exist in commits.
 
-### 7.3 Security
-- `.env` file is gitignored
-- `.gitignore` includes: `.env`, `*.log`, `runs*.json`, temp files
-- Secrets managed via GitHub Settings → Secrets and Variables → Actions
-- The Ollama Cloud API key is in both GitHub Secrets (`AGENT_CUSTOM_API_KEY`) and the test scripts (hardcoded — should be cleaned up)
+### 7.3 Security (UPDATED 2026-02-25)
+- ✅ All hardcoded API keys removed from test scripts (now use `OLLAMA_API_KEY` env var)
+- ✅ `.env` file is gitignored
+- ✅ `.gitignore` includes: `.env`, `*.log`, `runs*.json`, temp files
+- ✅ Secrets managed via GitHub Settings → Secrets and Variables → Actions
+- ⚠️ The GitHub PAT is embedded in the local git remote URL (visible via `git remote -v`)
+- ⚠️ API keys and PATs may still exist in git history (the repo is PUBLIC). Consider using `git filter-branch` or BFG Repo Cleaner if this is a concern.
+- ⚠️ The Ollama Cloud API key was previously hardcoded in 8 committed files. Those commits are still in repo history.
 
 ---
 
@@ -304,6 +317,9 @@ docker exec -e GH_TOKEN=<token> thepopebot-event-handler gh pr close <pr-number>
 
 ### 8.6 Run Model Tests
 ```powershell
+# Set API key first (required — no longer hardcoded)
+$env:OLLAMA_API_KEY = "your-ollama-api-key-here"
+
 # All 4 models — identity + 500-word essay
 node D:\dev_aiwinsor\popebot_agent\test_all_models.mjs
 
@@ -330,7 +346,7 @@ Edit the `"job"` field in `config/CRONS.json`. The job field is the exact prompt
 - [x] PopeBot deployed on GitHub Actions
 - [x] Ollama Cloud models configured (custom provider)
 - [x] 3 agents running (Jackie, Mimi, Kate)
-- [x] 112 skills built, tested, and consolidated
+- [x] 102 skills built and consolidated (69 with implementation code, 33 spec-only)
 - [x] Dedup instruction added to prevent skill rebuilds
 - [x] Repository switched to public for free compute
 - [x] PAT rotated and secured
@@ -371,14 +387,82 @@ REPO:       winsorllc/upgraded-carnival (PUBLIC)
 PROVIDER:   custom (Ollama Cloud)
 BASE URL:   https://ollama.com/v1
 AGENTS:     Jackie (glm-5), Mimi (minimax-m2.5), Kate (kimi-k2.5)
-SKILLS:     112 in .pi/skills/
+SKILLS:     102 SKILL.md files in .pi/skills/ (69 with code, 33 spec-only)
 COST:       $20/mo
 STATUS:     Crons DISABLED — flip enabled:true in CRONS.json to restart
 PAT:        In GitHub Secrets as GH_TOKEN (rotated 2026-02-25)
 EMAIL:      winsorhoang@gmail.com → reports to winsorllc@yahoo.com
+API KEY:    Set OLLAMA_API_KEY env var before running tests
 LOCAL DIR:  D:\dev_aiwinsor\popebot_agent\
 ```
 
 ---
 
-*This document is the complete handoff for any LLM or human operator to manage the PopeBot agent system.*
+## 12. Secret Rotation Procedures
+
+### 12.1 Rotate GitHub PAT
+1. Go to https://github.com/settings/tokens → Generate new token (classic)
+2. Scope: `repo`, `workflow`, `write:packages`
+3. Update in GitHub Secrets: Repo → Settings → Secrets → `GH_TOKEN`
+4. Update local git remote: `git remote set-url origin https://<new-pat>@github.com/winsorllc/upgraded-carnival.git`
+5. Update Docker event handler if running: set `GH_TOKEN` env var
+
+### 12.2 Rotate Ollama Cloud API Key
+1. Go to Ollama Cloud dashboard → API Keys → Regenerate
+2. Update in GitHub Secrets: `AGENT_CUSTOM_API_KEY`
+3. Set locally: `$env:OLLAMA_API_KEY = "<new-key>"`
+
+---
+
+## 13. Disaster Recovery
+
+### 13.1 Repo Corruption
+The repo is on GitHub. Clone fresh: `git clone https://github.com/winsorllc/upgraded-carnival.git`
+
+### 13.2 Agents Producing Garbage
+- Disable crons immediately (`enabled: false` in CRONS.json, commit, push)
+- Close bad PRs: `gh pr close <number> -R winsorllc/upgraded-carnival`
+- Revert bad merges: `git revert <commit-hash>`
+
+### 13.3 Ollama Cloud Subscription Lapses
+- All agent runs will fail with auth errors
+- No data loss — skills on main are safe
+- Re-subscribe and update API key per §12.2
+
+### 13.4 GitHub Actions Free Tier Changes
+- If GitHub removes unlimited public repo minutes, switch back to private (2,000 min/mo free)
+- Or move agent execution to a self-hosted runner or VPS
+
+### 13.5 Recovering Downgraded Skills
+Some skills were downgraded during merge (e.g., `weather` went from 6.5K → 2.5K). To restore:
+```bash
+# Find the commit with the better version
+git log --all --oneline -- ".pi/skills/weather/SKILL.md"
+# Restore from specific commit
+git show <commit-hash>:.pi/skills/weather/SKILL.md > .pi/skills/weather/SKILL.md
+git add .pi/skills/weather/SKILL.md && git commit -m "Restore best weather skill"
+```
+
+### 13.6 Recovering Skills from Closed PRs
+PRs #1, #3, #6, #7 were closed with merge conflicts. Their branches still exist on GitHub and may contain ~26 unique skills not on main. To recover:
+```bash
+git fetch origin pull/<pr-number>/head:recovery-<pr-number>
+git checkout recovery-<pr-number> -- .pi/skills/<skill-name>/
+git add . && git commit -m "Recover <skill-name> from PR #<number>"
+```
+
+---
+
+## 14. Accuracy & Limitations Disclosure
+
+This document was written by an LLM (Antigravity) and self-critiqued. Known limitations:
+
+1. **Skill counts** were verified against the filesystem on 2026-02-25. They may drift as agents create new skills.
+2. **Agent attribution** (who built which skill) is based on PR branch names and run logs, not embedded metadata. It could be wrong for skills that were rebuilt by multiple agents.
+3. **Performance rankings** are based on 2 days of runs and 2 API tests. A larger sample may yield different results.
+4. **Gwen's "broken" diagnosis** is based on limited testing. It may be an API/infrastructure issue rather than a model deficiency.
+5. **File sizes** were used as a proxy for quality in some comparisons. Actual quality requires reading the content (which was done for key skills but not all 102).
+
+---
+
+*This document is the complete handoff for any LLM or human operator to manage the PopeBot agent system. Last verified: 2026-02-25T20:08Z.*
