@@ -1,0 +1,4 @@
+{
+    "llm_provider": "custom",
+    "llm_model": "glm-5"
+}
