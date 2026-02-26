@@ -48,6 +48,8 @@ jobs:
       - name: Gather job results and notify
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_URL: ${{ vars.APP_URL }}
+          GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
         run: |
           PR_NUMBER="${{ steps.pr.outputs.number }}"
           BRANCH="${{ github.event.workflow_run.head_branch }}"
@@ -113,7 +115,24 @@ jobs:
             }' > /tmp/payload.json
 
           # 7. Send to event handler
-          curl -s -X POST "${{ vars.APP_URL }}/api/github/webhook" \
+          if [ -z "${APP_URL:-}" ]; then
+            echo "::warning::APP_URL is not set; skipping event handler notify."
+            exit 0
+          fi
+          if echo "$APP_URL" | grep -Eqi '^(https?://)?(localhost|127\.0\.0\.1)(:|/|$)'; then
+            echo "::warning::APP_URL points to localhost (${APP_URL}); skipping event handler notify on GitHub-hosted runner."
+            exit 0
+          fi
+          if [ -z "${GH_WEBHOOK_SECRET:-}" ]; then
+            echo "::warning::GH_WEBHOOK_SECRET is not set; skipping event handler notify."
+            exit 0
+          fi
+
+          if ! curl -sS --connect-timeout 5 --max-time 20 --retry 2 --retry-all-errors \
+            -X POST "${APP_URL%/}/api/github/webhook" \
             -H "Content-Type: application/json" \
-            -H "X-GitHub-Webhook-Secret-Token: ${{ secrets.GH_WEBHOOK_SECRET }}" \
-            -d @/tmp/payload.json
+            -H "X-GitHub-Webhook-Secret-Token: ${GH_WEBHOOK_SECRET}" \
+            -d @/tmp/payload.json; then
+            echo "::warning::Event handler notify failed; continuing without failing workflow."
+            exit 0
+          fi
