@@ -1,179 +1,140 @@
 ---
 name: obsidian
-description: "Manage Obsidian vault files, search notes, and create new content. Use when: user wants to read, search, or create Markdown notes in an Obsidian vault. No API key needed - file-based access."
-metadata:
-  openclaw:
-    emoji: "🔍"
-    requires:
-      bins:
-        - find
-        - grep
-        - rg
-        - cat
-        - mkdir
+description: Interact with Obsidian vaults for reading, writing, and searching notes. Use when: (1) user wants to read from their Obsidian vault, (2) user wants to create or update notes, (3) user is working with a personal knowledge management system, (4) user mentions taking notes or linking ideas in Obsidian.
 ---
 
 # Obsidian Skill
 
-Access and manage Obsidian vault files locally.
+Interact with local Obsidian vaults for reading, writing, organizing, and searching notes.
 
 ## When to Use
 
-✅ **USE this skill when:**
+- User wants to read notes from their Obsidian vault
+- User wants to create new notes or update existing ones
+- User mentions their "second brain", "Obsidian", or "vault"
+- Taking notes for later reference in a knowledge base
+- Creating Daily Notes automatically
+- Searching across all vault content
+- Working with backlinks and wikilinks
 
-- Search for notes in Obsidian vault
-- Read note content
-- Create new notes
-- Update existing notes
-- List vault structure
+## Setup
 
-❌ **DON'T use this skill when:**
-
-- Need to sync with Obsidian Sync
-- Access vault remotely
-- Need GUI-only features
+No additional installation required. Requires:
+- Node.js (for advanced features)
+- Access to the user's Obsidian vault directory
 
 ## Configuration
 
-```bash
-# Set vault path (can also pass as argument)
-export OBSIDIAN_VAULT_PATH="/path/to/your/vault"
+The skill uses these environment variables (can be set via the chat):
+
+```
+OBSIDIAN_VAULT_PATH=/path/to/your/vault
 ```
 
-Or pass vault path as first argument to any command.
+If not set, defaults to `~/Obsidian/VaultName` or prompts the user.
 
-## Commands
+## Usage
 
-### Find Notes
-
-```bash
-# Find notes by name (case-insensitive)
-find "$OBSIDIAN_VAULT_PATH" -name "*.md" -iname "*keyword*"
-
-# Find notes containing text
-rg -l "search term" "$OBSIDIAN_VAULT_PATH" --glob "*.md"
-
-# Find notes by tag
-rg -l "#tagname" "$OBSIDIAN_VAULT_PATH" --glob "*.md"
-```
-
-### Read Note
+### Quick Commands
 
 ```bash
-# Read entire note
-cat "$OBSIDIAN_VAULT_PATH/folder/note.md"
+# List available vaults
+obsidian-list
 
-# Read with line numbers
-cat -n "$OBSIDIAN_VAULT_PATH/folder/note.md"
+# Search notes
+obsidian-search "keyword"
 
-# Read first 50 lines
-head -50 "$OBSIDIAN_VAULT_PATH/folder/note.md"
+# Read a note
+obsidian-read "folder/note-name"
+
+# Create or update a note
+obsidian-write "folder/note-name" "content here"
+
+# Create a daily note
+obsidian-daily
+
+# List recent notes
+obsidian-recent 10
 ```
 
-### List Vault
+### Workflow Examples
 
-```bash
-# List all notes
-find "$OBSIDIAN_VAULT_PATH" -name "*.md" | sort
-
-# List notes by folder
-find "$OBSIDIAN_VAULT_PATH/folder" -name "*.md" | sort
-
-# List folders
-find "$OBSIDIAN_VAULT_PATH" -type d | sort
+#### Reading from Vault
+```
+User: What's in my Obsidian vault about AI agents?
+Agent: [Uses obsidian-search to find relevant notes]
 ```
 
-### Create Note
-
-```bash
-# Create new note with template
-cat > "$OBSIDIAN_VAULT_PATH/notes/new-note.md" << 'EOF'
----
-tags: []
-created: $(date +%Y-%m-%d)
----
-
-# New Note Title
-
-Start writing here...
-
-EOF
-
-# Or use echo
-echo -e "---\n---\n\n# Title\n\nContent" > "$OBSIDIAN_VAULT_PATH/notes/new.md"
+#### Creating Notes
+```
+User: Take a note about the meeting with John about the project
+Agent: [Uses obsidian-write to create a note with the meeting notes]
+Agent: [Offers to add wikilinks to related notes in the vault]
 ```
 
-### Update Note
-
-```bash
-# Append to note
-echo "\n\n## Update $(date)" >> "$OBSIDIAN_VAULT_PATH/notes/note.md"
-
-# Insert at line 10
-sed -i '10i\New line content' "$OBSIDIAN_VAULT_PATH/notes/note.md"
-
-# Replace text
-sed -i 's/old_text/new_text/g' "$OBSIDIAN_VAULT_PATH/notes/note.md"
+#### Daily Notes Workflow
+```
+User: Create a daily note for today
+Agent: [Uses obsidian-daily to create today's note with template]
 ```
 
-### Search Examples
+## Script Details
 
-```bash
-# Search with context
-rg -B2 -A2 "search term" "$OBSIDIAN_VAULT_PATH" --glob "*.md"
+### obsidian-list
+Lists all directories in the vault root - useful for seeing vault structure.
 
-# Search and show only matches
-rg -o "matching text" "$OBSIDIAN_VAULT_PATH" --glob "*.md" -g '*.md'
+### obsidian-search
+Searches for text in all .md files in the vault. Uses case-insensitive grep.
 
-# Find notes modified recently
-find "$OBSIDIAN_VAULT_PATH" -name "*.md" -mtime -7
-```
+### obsidian-read
+Reads the content of a specific note. Supports subdirectories.
 
-### Backlinks
+### obsidian-write
+Creates a new note or updates an existing one. Automatically creates parent directories.
 
-```bash
-# Find all notes linking to a note
-rg -l "\[\[note-name\]\]" "$OBSIDIAN_VAULT_PATH" --glob "*.md"
+### obsidian-daily
+Creates a daily note in the format `YYYY-MM-DD.md` with optional template.
+Template location: `.obsidian/daily-note-template.md` in vault root.
 
-# Find orphan notes (no backlinks - approximation)
-for f in $(find "$OBSIDIAN_VAULT_PATH" -name "*.md"); do
-  if ! rg -q "\[\[$(basename $f .md)\]\]" "$OBSIDIAN_VAULT_PATH"; then
-    echo "$f"
-  fi
-done
-```
+### obsidian-recent
+Lists the most recently modified notes.
 
-### Vault Statistics
+### obsidian-w-links
+Lists all wikilinks ( [[note]] ) in a note - shows what a note links to.
 
-```bash
-# Count notes
-find "$OBSIDIAN_VAULT_PATH" -name "*.md" | wc -l
+### obsidian-backlinks
+Finds all notes that link to a specific note - shows what links TO that note.
 
-# Count words in vault
-find "$OBSIDIAN_VAULT_PATH" -name "*.md" -exec cat {} \; | wc -w
+### obsidian-tags
+Lists all #tags used in the vault with counts.
 
-# List all tags
-rg -o '#[a-zA-Z0-9-]+' "$OBSIDIAN_VAULT_PATH" --glob "*.md" | sort | uniq -c | sort -rn
+## Common Workflows
 
-# List all links
-rg -o '\[\[[^\]]+\]\]' "$OBSIDIAN_VAULT_PATH" --glob "*.md" | sort | uniq -c | sort -rn
-```
+### Research & Note Taking
+1. Search existing notes: `obsidian-search "topic"`
+2. Read related notes: `obsidian-read "topic/overview"`
+3. Create new note: `obsidian-write "topic/new-ideas.md" "# New Ideas\n\n..."`
 
-## Quick Reference
+### Daily Workflow
+1. Create daily note: `obsidian-daily`
+2. Add to daily note: `obsidian-write "2024-01-15" "- discussed X\n- action: do Y"`
+3. Link to project: `obsidian-write "2024-01-15" "(see [[projects/active]])"`
 
-| Action | Command |
-|--------|---------|
-| Find notes | `find "$VAULT" -name "*.md" -iname "*keyword*"` |
-| Search content | `rg "term" "$VAULT" --glob "*.md"` |
-| Read note | `cat "$VAULT/folder/note.md"` |
-| Create note | `echo "# Title" > "$VAULT/notes/new.md"` |
-| List all | `find "$VAULT" -name "*.md"` |
-| Count notes | `find "$VAULT" -name "*.md" | wc -l` |
+### Knowledge Graph Exploration
+1. Find tags: `obsidian-tags`
+2. Explore backlinks: `obsidian-backlinks "Concept"`
+3. Find connections: `obsidian-w-links "Idea"`
 
-## Notes
+## Limitations
 
-- Obsidian vaults are just folders of Markdown files
-- Wiki-links use `[[note-name]]` format
-- Tags use `#tagname` format
-- Frontmatter is YAML between `---` delimiters
-- No API needed - direct filesystem access
+- Only works with markdown (.md) files
+- No DataviewJS query support
+- Vault must be accessible on the local filesystem
+- No sync with Obsidian Sync or Remotely Save
+
+## Tips
+
+1. Use subdirectories to organize notes (e.g., "projects/ai/notes.md")
+2. Add frontmatter to notes for metadata (title, date, tags)
+3. Use wikilinks [[note-name]] to connect related ideas
+4. Create a daily note template in `.obsidian/daily-note-template.md`

@@ -1,0 +1,48 @@
+#!/bin/bash
+# SOP Status - Check the status of an SOP run
+
+set -e
+
+STATE_DIR="${STATE_DIR:-$HOME/.thepopebot/sop-state}"
+
+usage() {
+    echo "Usage: sop-status <run-id>"
+    echo ""
+    echo "Arguments:"
+    echo "  <run-id>   The ID of the SOP run to check"
+    exit 1
+}
+
+if [ -z "$1" ]; then
+    usage
+fi
+
+RUN_ID="$1"
+STATE_FILE="$STATE_DIR/$RUN_ID.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Run '$RUN_ID' not found"
+    exit 1
+fi
+
+# Display formatted status
+echo "SOP Run Status"
+echo "============="
+echo ""
+
+jq -r '
+"
+Run ID: \(.run_id)
+SOP Name: \(.sop_name)
+Status: \(.status)
+Mode: \(.mode)
+Priority: \(.priority)
+
+Started: \(.started_at)
+Completed: \(.completed_at // "N/A")
+
+Current Step: \(.current_step)
+
+History:
+" + (.history | map("  Step \(.step): \(.title) - \(.status)") | join("\n"))
+' "$STATE_FILE"

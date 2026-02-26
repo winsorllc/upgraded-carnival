@@ -1,0 +1,292 @@
+#!/bin/bash
+# SOP Execute - Start an SOP execution
+
+set -e
+
+SOP_DIR="${SOP_DIR:-$HOME/.thepopebot/sops}"
+DATA_DIR="${DATA_DIR:-$HOME/.thepopebot/sop-data}"
+STATE_DIR="${STATE_DIR:-$HOME/.thepopebot/sop-state}"
+AUDIT_DIR="${AUDIT_DIR:-$HOME/.thepopebot/sop-audit}"
+
+# Ensure directories exist
+mkdir -p "$SOP_DIR" "$DATA_DIR" "$STATE_DIR" "$AUDIT_DIR"
+
+# Parse arguments
+SOP_NAME=""
+PAYLOAD="{}"
+APPROVAL_MODE="auto"
+
+usage() {
+    echo "Usage: sop-execute <sop-name> [--payload <json>]"
+    echo ""
+    echo "Arguments:"
+    echo "  <sop-name>          Name of the SOP to execute"
+    echo "  --payload <json>   Optional JSON payload (default: {})"
+    exit 1
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            usage
+            ;;
+        --payload)
+            PAYLOAD="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$SOP_NAME" ]; then
+                SOP_NAME="$1"
+            else
+                echo "Unknown argument: $1"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$SOP_NAME" ]; then
+    usage
+fi
+
+# Find SOP file
+SOP_FILE=""
+for f in "$SOP_DIR"/*.md; do
+    if [ -f "$f" ]; then
+        fname=$(basename "$f" .md)
+        if [ "$fname" = "$SOP_NAME" ]; then
+            SOP_FILE="$f"
+            break
+        fi
+    fi
+done
+
+if [ -z "$SOP_FILE" ] || [ ! -f "$SOP_FILE" ]; then
+    echo "Error: SOP '$SOP_NAME' not found in $SOP_DIR/"
+    exit 1
+fi
+
+# Extract metadata from frontmatter
+SOP_DESCRIPTION=$(grep -m1 "^description:" "$SOP_FILE" 2>/dev/null | sed 's/^description: *//' || echo "")
+SOP_PRIORITY=$(grep -m1 "^priority:" "$SOP_FILE" 2>/dev/null | sed 's/^priority: *//' || echo "normal")
+SOP_MODE=$(grep -m1 "^execution_mode:" "$SOP_FILE" 2>/dev/null | sed 's/^execution_mode: *//' || echo "supervised")
+
+# Generate run ID
+RUN_ID="run-$(date +%Y%m%d-%H%M%S)-$$"
+
+# Extract steps from markdown (after the closing ---)
+# Steps are denoted by ## Step N:
+# First, find where frontmatter ends (second --- line)
+BODY_START=$(grep -n "^---$" "$SOP_FILE" | tail -n 1 | cut -d: -f1)
+BODY_START=$((BODY_START + 1))
+STEPS=$(tail -n +$BODY_START "$SOP_FILE" | grep -E "^## Step [0-9]+:" | sed 's/^## Step [0-9]*: *//')
+
+if [ -z "$STEPS" ]; then
+    echo "Error: No steps found in SOP"
+    exit 1
+fi
+
+# Convert steps to array
+readarray -t STEP_ARRAY <<< "$STEPS"
+TOTAL_STEPS=${#STEP_ARRAY[@]}
+
+echo "Starting SOP: $SOP_NAME"
+echo "Run ID: $RUN_ID"
+echo "Mode: $SOP_MODE"
+echo "Steps: $TOTAL_STEPS"
+echo ""
+
+# Initialize state
+START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+cat > "$STATE_DIR/$RUN_ID.json" << EOF
+{
+  "run_id": "$RUN_ID",
+  "sop_name": "$SOP_NAME",
+  "status": "running",
+  "current_step": 0,
+  "started_at": "$START_TIME",
+  "mode": "$SOP_MODE",
+  "priority": "$SOP_PRIORITY",
+  "payload": $PAYLOAD,
+  "history": []
+}
+EOF
+
+# Initialize audit log
+cat > "$AUDIT_DIR/$RUN_ID.log" << EOF
+SOP Execution Log
+=================
+SOP: $SOP_NAME
+Run ID: $RUN_ID
+Started: $START_TIME
+Mode: $SOP_MODE
+Priority: $SOP_PRIORITY
+Payload: $PAYLOAD
+
+EOF
+
+# Function to execute a step
+execute_step() {
+    local step_num=$1
+    local step_title=$2
+    
+    echo "Step $step_num: $step_title"
+    echo "" >> "$AUDIT_DIR/$RUN_ID.log"
+    echo "--- Step $step_num: $step_title ---" >> "$AUDIT_DIR/$RUN_ID.log"
+    
+    # Extract step content (between this step and next)
+    local step_content=$(awk -v start="## Step $step_num:" '
+        $0 ~ start { found=1; next }
+        found && /^## Step [0-9]+:/ { found=0 }
+        found { print }
+    ' "$SOP_FILE")
+    
+    # Extract bash code blocks
+    local commands=$(echo "$step_content" | sed -n '/^```bash$/,/^```$/p' | sed '1d;$d')
+    
+    local step_output=""
+    local step_status="completed"
+    
+    if [ -n "$commands" ]; then
+        # Execute commands
+        step_output=$(eval "$commands" 2>&1) || step_status="failed"
+        echo "$step_output" >> "$AUDIT_DIR/$RUN_ID.log"
+    fi
+    
+    # Check if approval required (could be configured per step)
+    local requires_approval=false
+    if echo "$step_title" | grep -qi "approval\|confirm\|deploy\|production"; then
+        requires_approval=true
+    fi
+    
+    # Update state
+    local current_state=$(cat "$STATE_DIR/$RUN_ID.json")
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    
+    # Build history entry
+    local history_entry="{\"step\": $step_num, \"title\": \"$step_title\", \"status\": \"$step_status\", \"timestamp\": \"$timestamp\"}"
+    
+    # Update JSON state - step 1: update current_step
+    echo "$current_state" | jq \
+        --arg step "$step_num" \
+        --arg title "$step_title" \
+        --arg status "$step_status" \
+        --arg ts "$timestamp" \
+        --argjson hist "$history_entry" \
+        '.current_step = ($step | tonumber)' > "$STATE_DIR/$RUN_ID.tmp" && \
+        mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+    
+    # Step 2: update history
+    CURRENT=$(cat "$STATE_DIR/$RUN_ID.json")
+    echo "$CURRENT" | jq --argjson hist "$history_entry" '.history += [$hist]' > "$STATE_DIR/$RUN_ID.tmp" && \
+        mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+    
+    if [ "$step_status" = "failed" ]; then
+        echo "Step FAILED"
+        # Update status to failed
+        cat "$STATE_DIR/$RUN_ID.json" | jq '.status = "failed"' > "$STATE_DIR/$RUN_ID.tmp"
+        mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+        return 1
+    fi
+    
+    # Check if needs approval
+    if [ "$requires_approval" = true ] && [ "$SOP_MODE" = "step_by_step" ]; then
+        echo ""
+        echo "⚠️  Approval required for step $step_num"
+        echo "Run 'sop-approve $RUN_ID' to continue"
+        
+        cat "$STATE_DIR/$RUN_ID.json" | jq '.status = "pending_approval"' > "$STATE_DIR/$RUN_ID.tmp"
+        mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+        
+        # Wait for approval (poll every 10 seconds)
+        while true; do
+            sleep 10
+            local status=$(jq -r '.status' "$STATE_DIR/$RUN_ID.json")
+            if [ "$status" = "approved" ]; then
+                echo "✓ Approved, continuing..."
+                break
+            elif [ "$status" = "rejected" ]; then
+                echo "✗ Rejected"
+                exit 1
+            fi
+        done
+    fi
+    
+    echo "✓ Completed"
+    return 0
+}
+
+# Determine execution approach based on mode
+EXECUTE_ALL=false
+if [ "$SOP_MODE" = "auto" ] || [ "$SOP_PRIORITY" = "critical" ] || [ "$SOP_PRIORITY" = "high" ]; then
+    EXECUTE_ALL=true
+fi
+
+# Execute steps
+if [ "$EXECUTE_ALL" = true ]; then
+    echo "Mode: AUTO - executing all steps"
+    step_num=1
+    for step_title in "${STEP_ARRAY[@]}"; do
+        execute_step "$step_num" "$step_title" || exit 1
+        ((step_num++))
+    done
+else
+    # Supervised mode - execute first step, then wait
+    echo "Mode: SUPERVISED - executing first step only"
+    execute_step 1 "${STEP_ARRAY[0]}" || exit 1
+    
+    echo ""
+    echo "⚠️  Approval required to continue"
+    echo "Run 'sop-approve $RUN_ID' to proceed with remaining steps"
+    
+    # Update status to pending approval
+    cat "$STATE_DIR/$RUN_ID.json" | jq '.status = "pending_approval"' > "$STATE_DIR/$RUN_ID.tmp"
+    mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+    
+    # Store PID for continuation
+    echo $$ > "$STATE_DIR/$RUN_ID.pid"
+    
+    # Wait for approval
+    while true; do
+        sleep 10
+        local status=$(jq -r '.status' "$STATE_DIR/$RUN_ID.json")
+        if [ "$status" = "approved" ]; then
+            echo "✓ Approved, continuing with remaining steps..."
+            break
+        elif [ "$status" = "rejected" ]; then
+            echo "✗ Rejected"
+            exit 1
+        fi
+    done
+    
+    # Continue with remaining steps
+    step_num=2
+    for ((i=1; i<${#STEP_ARRAY[@]}; i++)); do
+        execute_step "$step_num" "${STEP_ARRAY[$i]}" || exit 1
+        ((step_num++))
+    done
+fi
+
+# Mark as completed
+END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Read current state and update
+CURRENT=$(cat "$STATE_DIR/$RUN_ID.json")
+echo "$CURRENT" | jq '.status = "completed"' > "$STATE_DIR/$RUN_ID.tmp"
+mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+
+# Now add completed_at
+CURRENT=$(cat "$STATE_DIR/$RUN_ID.json")
+echo "$CURRENT" | sed "s/\"status\": \"completed\"/\"status\": \"completed\", \"completed_at\": \"$END_TIME\"/" > "$STATE_DIR/$RUN_ID.tmp"
+mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_DIR/$RUN_ID.json"
+
+echo ""
+echo "=== SOP Complete ==="
+echo "Run ID: $RUN_ID"
+echo "Status: completed"
+echo "Completed at: $END_TIME"
+
+# Write to audit log
+echo "" >> "$AUDIT_DIR/$RUN_ID.log"
+echo "=== Completed at $END_TIME ===" >> "$AUDIT_DIR/$RUN_ID.log"

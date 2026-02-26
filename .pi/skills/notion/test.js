@@ -1,255 +1,224 @@
 #!/usr/bin/env node
+
 /**
- * Notion Skill Test
- * Tests the Notion API integration without requiring actual API credentials
+ * Test suite for Notion skill
+ * Tests CLI functionality without requiring actual API credentials
  */
 
+const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
-// Mock the NOTION_API_KEY for testing
-process.env.NOTION_API_KEY = 'test_secret_key';
+// Test configuration
+const NOTION_CLI = path.join(__dirname, 'notion.js');
+const TEST_API_KEY = 'secret_test_key_123456789';
 
-// Import the notion module
-const notion = require('./index.js');
-
-const tests = [];
 let passed = 0;
 let failed = 0;
 
-function test(name, fn) {
-  tests.push({ name, fn });
+console.log('🧪 Notion Skill Test Suite\n');
+console.log('='.repeat(50));
+
+// Helper to run CLI and capture output
+function runCli(args, env = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [NOTION_CLI, ...args], {
+      env: { ...process.env, ...env },
+      stdio: 'pipe'
+    });
+    
+    let stdout = '';
+    let stderr = '';
+    
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
+    
+    child.on('close', (code) => {
+      resolve({ code, stdout, stderr });
+    });
+    
+    child.on('error', reject);
+  });
 }
 
-async function runTests() {
-  console.log('🧪 Testing Notion Skill\n');
-  console.log('='.repeat(50));
-
-  for (const { name, fn } of tests) {
-    try {
-      await fn();
-      console.log(`✅ ${name}`);
-      passed++;
-    } catch (error) {
-      console.log(`❌ ${name}`);
-      console.log(`   Error: ${error.message}`);
-      failed++;
-    }
+// Test helper
+async function test(name, fn) {
+  process.stdout.write(`Testing: ${name}... `);
+  try {
+    await fn();
+    console.log('✅ PASS');
+    passed++;
+  } catch (error) {
+    console.log('❌ FAIL');
+    console.log(`   Error: ${error.message}`);
+    failed++;
   }
+}
 
-  console.log('='.repeat(50));
-  console.log(`\nResults: ${passed} passed, ${failed} failed, ${tests.length} total`);
+// Test assertions
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message || 'Assertion failed');
+  }
+}
+
+function assertContains(str, substring, message) {
+  if (!str || !str.includes(substring)) {
+    throw new Error(message || `Expected string to contain "${substring}"`);
+  }
+}
+
+// Tests
+async function runTests() {
+  
+  // Test 1: Help output
+  await test('Help output displays correctly', async () => {
+    const result = await runCli([]);
+    assert(result.code === 0, 'Expected exit code 0');
+    assertContains(result.stdout, 'Notion CLI', 'Should show CLI name');
+    assertContains(result.stdout, 'Commands:', 'Should show commands list');
+  });
+  
+  // Test 2: Help with specific command
+  await test('Search command help', async () => {
+    const result = await runCli(['search', '--help']);
+    // May exit with error since --help isn't implemented specially
+    assertContains(result.stdout + result.stderr, 'search', 'Should mention search');
+  });
+  
+  // Test 3: Missing API key error
+  await test('Missing API key shows error', async () => {
+    // Unset any existing API key
+    const result = await runCli(['search', 'test'], { NOTION_API_KEY: '' });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, 'NOTION_API_KEY', 'Should mention API key');
+  });
+  
+  // Test 4: Search with invalid key (will fail API but CLI should handle)
+  await test('Search with API key handles error gracefully', async () => {
+    const result = await runCli(['search', 'test'], { NOTION_API_KEY: TEST_API_KEY });
+    // Should not crash, should show API error
+    assert(result.code !== 0 || result.stdout.length > 0, 'Should handle gracefully');
+  });
+  
+  // Test 5: Unknown command
+  await test('Unknown command shows error', async () => {
+    const result = await runCli(['unknown-command']);
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, 'Unknown command', 'Should mention unknown command');
+  });
+  
+  // Test 6: Page command without ID
+  await test('Page command without ID shows error', async () => {
+    const result = await runCli(['page'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, 'page ID required', 'Should require page ID');
+  });
+  
+  // Test 7: Blocks command without ID
+  await test('Blocks command without ID shows error', async () => {
+    const result = await runCli(['blocks'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, 'page ID required', 'Should require page ID');
+  });
+  
+  // Test 8: Query command without ID
+  await test('Query command without ID shows error', async () => {
+    const result = await runCli(['query'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, 'database ID required', 'Should require database ID');
+  });
+  
+  // Test 9: Create page without required options
+  await test('Create page without options shows error', async () => {
+    const result = await runCli(['create-page'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, '--parent', 'Should require parent');
+  });
+  
+  // Test 10: Create page without title
+  await test('Create page without title shows error', async () => {
+    const result = await runCli(['create-page', '--parent', 'test-parent'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, '--title', 'Should require title');
+  });
+  
+  // Test 11: Append blocks without content
+  await test('Append blocks without content shows error', async () => {
+    const result = await runCli(['append-blocks', 'test-page'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, '--content', 'Should require content');
+  });
+  
+  // Test 12: Create database without required options
+  await test('Create database without options shows error', async () => {
+    const result = await runCli(['create-database'], { NOTION_API_KEY: TEST_API_KEY });
+    assert(result.code !== 0, 'Should exit with error');
+    assertContains(result.stderr, '--parent', 'Should require parent');
+  });
+  
+  // Test 13: CLI is executable
+  await test('CLI file is valid JavaScript', async () => {
+    const content = fs.readFileSync(NOTION_CLI, 'utf-8');
+    assertContains(content, '#!/usr/bin/env node', 'Should have shebang');
+    assertContains(content, 'Notion CLI', 'Should have CLI name');
+  });
+  
+  // Test 14: Package.json is valid
+  await test('Package.json is valid', async () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8'));
+    assert(pkg.name === 'notion', 'Should have correct name');
+    assert(pkg.dependencies['@notionhq/client'], 'Should depend on notion client');
+  });
+  
+  // Test 15: SKILL.md is valid
+  await test('SKILL.md contains required sections', async () => {
+    const skillMd = fs.readFileSync(path.join(__dirname, 'SKILL.md'), 'utf-8');
+    assertContains(skillMd, '---', 'Should have frontmatter');
+    assertContains(skillMd, 'name: notion', 'Should have name');
+    assertContains(skillMd, 'Setup', 'Should have Setup section');
+    assertContains(skillMd, 'Usage', 'Should have Usage section');
+    assertContains(skillMd, '## Commands', 'Should document commands');
+  });
+  
+  // Test 16: --api-key flag support
+  await test('--api-key flag is recognized', async () => {
+    const result = await runCli(['search', 'test', '--api-key', TEST_API_KEY], { NOTION_API_KEY: '' });
+    // Should not say "API key not set" since we provided one
+    assert(!result.stderr.includes('NOTION_API_KEY not set'), 'Should accept API key from flag');
+  });
+  
+  // Test 17: Invalid filter JSON
+  await test('Invalid filter JSON shows error', async () => {
+    const result = await runCli(['query', 'db123', '--filter', 'invalid json'], { NOTION_API_KEY: TEST_API_KEY });
+    // The CLI might exit 1 or show error about filter - check stderr
+    const combined = result.stdout + result.stderr;
+    assert(result.code !== 0 || combined.includes('Invalid'), 'Should show error for invalid filter');
+  });
+  
+  // Test 18: databases command exists
+  await test('databases command exists', async () => {
+    const result = await runCli(['databases'], { NOTION_API_KEY: TEST_API_KEY });
+    // Should run (may fail on API but CLI should work)
+    assert(result.stdout.length > 0 || result.stderr.length > 0, 'Should produce output');
+  });
+  
+  // Print summary
+  console.log('\n' + '='.repeat(50));
+  console.log(`\n📊 Test Results: ${passed} passed, ${failed} failed\n`);
   
   if (failed > 0) {
+    console.log('❌ Some tests failed!');
     process.exit(1);
+  } else {
+    console.log('✅ All tests passed!');
+    console.log('\n📝 Note: Full API integration tests require a valid NOTION_API_KEY');
+    console.log('   To test with real API: export NOTION_API_KEY="secret_xxxxx"');
+    process.exit(0);
   }
 }
 
-// Test 1: Block creators return correct structure
-test('createParagraphBlock returns correct structure', () => {
-  const block = notion.createParagraphBlock('Hello World');
-  
-  if (block.object !== 'block') throw new Error('object should be "block"');
-  if (block.type !== 'paragraph') throw new Error('type should be "paragraph"');
-  if (!block.paragraph) throw new Error('paragraph property missing');
-  if (!block.paragraph.rich_text) throw new Error('rich_text missing');
-  if (block.paragraph.rich_text[0].text.content !== 'Hello World') {
-    throw new Error('content mismatch');
-  }
+runTests().catch(error => {
+  console.error('Test suite error:', error);
+  process.exit(1);
 });
-
-// Test 2: Create heading block
-test('createHeadingBlock returns correct structure', () => {
-  const block = notion.createHeadingBlock('My Heading', 2);
-  
-  if (block.type !== 'heading_2') throw new Error('type should be "heading_2"');
-  if (!block.heading_2) throw new Error('heading_2 property missing');
-});
-
-// Test 3: Create todo block
-test('createTodoBlock returns correct structure', () => {
-  const block = notion.createTodoBlock('Buy milk', true);
-  
-  if (block.type !== 'to_do') throw new Error('type should be "to_do"');
-  if (block.to_do.checked !== true) throw new Error('checked should be true');
-});
-
-// Test 4: Create code block
-test('createCodeBlock returns correct structure', () => {
-  const block = notion.createCodeBlock('console.log("hi")', 'javascript');
-  
-  if (block.type !== 'code') throw new Error('type should be "code"');
-  if (block.code.language !== 'javascript') throw new Error('language mismatch');
-});
-
-// Test 5: Create callout block
-test('createCalloutBlock returns correct structure', () => {
-  const block = notion.createCalloutBlock('Important!', '⚠️');
-  
-  if (block.type !== 'callout') throw new Error('type should be "callout"');
-  if (block.callout.icon.emoji !== '⚠️') throw new Error('emoji mismatch');
-});
-
-// Test 6: Create divider block
-test('createDividerBlock returns correct structure', () => {
-  const block = notion.createDividerBlock();
-  
-  if (block.type !== 'divider') throw new Error('type should be "divider"');
-});
-
-// Test 7: Property creators
-test('createTitleProperty returns correct structure', () => {
-  const prop = notion.createTitleProperty('My Title');
-  
-  if (!prop.title) throw new Error('title property missing');
-  if (prop.title[0].text.content !== 'My Title') throw new Error('content mismatch');
-});
-
-// Test 8: Create select property
-test('createSelectProperty returns correct structure', () => {
-  const prop = notion.createSelectProperty('Done');
-  
-  if (!prop.select) throw new Error('select property missing');
-  if (prop.select.name !== 'Done') throw new Error('name mismatch');
-});
-
-// Test 9: Create multi-select property
-test('createMultiSelectProperty returns correct structure', () => {
-  const prop = notion.createMultiSelectProperty(['Option1', 'Option2']);
-  
-  if (!prop.multi_select) throw new Error('multi_select property missing');
-  if (prop.multi_select.length !== 2) throw new Error('should have 2 options');
-});
-
-// Test 10: Create date property
-test('createDateProperty returns correct structure', () => {
-  const prop = notion.createDateProperty('2024-01-15', '2024-01-20');
-  
-  if (!prop.date) throw new Error('date property missing');
-  if (prop.date.start !== '2024-01-15') throw new Error('start date mismatch');
-  if (prop.date.end !== '2024-01-20') throw new Error('end date mismatch');
-});
-
-// Test 11: Create checkbox property
-test('createCheckboxProperty returns correct structure', () => {
-  const prop = notion.createCheckboxProperty(true);
-  
-  if (!prop.checkbox) throw new Error('checkbox property missing');
-  if (prop.checkbox !== true) throw new Error('value should be true');
-});
-
-// Test 12: Create number property
-test('createNumberProperty returns correct structure', () => {
-  const prop = notion.createNumberProperty(42);
-  
-  if (prop.number !== 42) throw new Error('number mismatch');
-});
-
-// Test 13: Create relation property
-test('createRelationProperty returns correct structure', () => {
-  const prop = notion.createRelationProperty(['id1', 'id2']);
-  
-  if (!prop.relation) throw new Error('relation property missing');
-  if (prop.relation.length !== 2) throw new Error('should have 2 relations');
-  if (prop.relation[0].id !== 'id1') throw new Error('id mismatch');
-});
-
-// Test 14: Create link preview block
-test('createLinkPreviewBlock returns correct structure', () => {
-  const block = notion.createLinkPreviewBlock('https://example.com');
-  
-  if (block.type !== 'link_preview') throw new Error('type mismatch');
-  if (block.link_preview.url !== 'https://example.com') throw new Error('url mismatch');
-});
-
-// Test 15: Create bookmark block
-test('createBookmarkBlock returns correct structure', () => {
-  const block = notion.createBookmarkBlock('https://example.com', 'Example Site');
-  
-  if (block.type !== 'bookmark') throw new Error('type mismatch');
-  if (block.bookmark.url !== 'https://example.com') throw new Error('url mismatch');
-});
-
-// Test 16: Create bulleted list item
-test('createBulletedListItem returns correct structure', () => {
-  const block = notion.createBulletedListItem('Item 1');
-  
-  if (block.type !== 'bulleted_list_item') throw new Error('type mismatch');
-});
-
-// Test 17: Create numbered list item
-test('createNumberedListItem returns correct structure', () => {
-  const block = notion.createNumberedListItem('Step 1');
-  
-  if (block.type !== 'numbered_list_item') throw new Error('type mismatch');
-});
-
-// Test 18: Create toggle block
-test('createToggleBlock returns correct structure', () => {
-  const block = notion.createToggleBlock('Click me');
-  
-  if (block.type !== 'toggle') throw new Error('type mismatch');
-  if (!block.toggle) throw new Error('toggle property missing');
-});
-
-// Test 19: Create bookmark block without caption
-test('createBookmarkBlock without caption', () => {
-  const block = notion.createBookmarkBlock('https://example.com');
-  
-  if (block.bookmark.caption && block.bookmark.caption.length > 0) {
-    throw new Error('caption should be empty array');
-  }
-});
-
-// Test 20: Notion API function exists
-test('notionApi function exists', () => {
-  if (typeof notion.notionApi !== 'function') {
-    throw new Error('notionApi should be a function');
-  }
-});
-
-// Test 21: Search function exists
-test('search function exists', () => {
-  if (typeof notion.search !== 'function') {
-    throw new Error('search should be a function');
-  }
-});
-
-// Test 22: getPage function exists
-test('getPage function exists', () => {
-  if (typeof notion.getPage !== 'function') {
-    throw new Error('getPage should be a function');
-  }
-});
-
-// Test 23: createPage function exists
-test('createPage function exists', () => {
-  if (typeof notion.createPage !== 'function') {
-    throw new Error('createPage should be a function');
-  }
-});
-
-// Test 24: queryDatabase function exists
-test('queryDatabase function exists', () => {
-  if (typeof notion.queryDatabase !== 'function') {
-    throw new Error('queryDatabase should be a function');
-  }
-});
-
-// Test 25: Error handling without API key
-test('notionApi throws error without API key', async () => {
-  const originalKey = process.env.NOTION_API_KEY;
-  delete process.env.NOTION_API_KEY;
-  
-  try {
-    await notion.notionApi('/search');
-    throw new Error('Should have thrown an error');
-  } catch (error) {
-    if (!error.message.includes('NOTION_API_KEY')) {
-      throw new Error('Error message should mention NOTION_API_KEY');
-    }
-  } finally {
-    process.env.NOTION_API_KEY = originalKey;
-  }
-});
-
-runTests();

@@ -1,0 +1,82 @@
+#!/bin/bash
+# SOP Runs - List all SOP runs
+
+STATE_DIR="${STATE_DIR:-$HOME/.thepopebot/sop-state}"
+
+usage() {
+    echo "Usage: sop-runs [--sop <name>]"
+    echo ""
+    echo "Options:"
+    echo "  --sop <name>   Filter by SOP name"
+    exit 1
+}
+
+FILTER_SOP=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --sop)
+            FILTER_SOP="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+echo "SOP Runs"
+echo "======="
+echo ""
+
+# Check if any runs exist
+if [ ! -d "$STATE_DIR" ]; then
+    echo "No runs found"
+    exit 0
+fi
+
+# Find all JSON files
+RUNS_FOUND=false
+for state_file in "$STATE_DIR"/*.json; do
+    if [ -f "$state_file" ]; then
+        RUNS_FOUND=true
+        RUN_ID=$(basename "$state_file" .json)
+        
+        # Extract info
+        SOP_NAME=$(jq -r '.sop_name' "$state_file")
+        STATUS=$(jq -r '.status' "$state_file")
+        STARTED=$(jq -r '.started_at' "$state_file")
+        CURRENT_STEP=$(jq -r '.current_step' "$state_file")
+        
+        # Filter if requested
+        if [ -n "$FILTER_SOP" ] && [ "$SOP_NAME" != "$FILTER_SOP" ]; then
+            continue
+        fi
+        
+        # Format status with emoji
+        case $STATUS in
+            running) STATUS_DISP="🔄 running" ;;
+            pending_approval) STATUS_DISP="⏸️  pending approval" ;;
+            approved) STATUS_DISP="▶️  approved" ;;
+            completed) STATUS_DISP="✅ completed" ;;
+            failed) STATUS_DISP="❌ failed" ;;
+            rejected) STATUS_DISP="🚫 rejected" ;;
+            *) STATUS_DISP="$STATUS" ;;
+        esac
+        
+        echo "  $RUN_ID"
+        echo "    SOP: $SOP_NAME"
+        echo "    Status: $STATUS_DISP"
+        echo "    Step: $CURRENT_STEP"
+        echo "    Started: $STARTED"
+        echo ""
+    fi
+done
+
+if [ "$RUNS_FOUND" = false ]; then
+    echo "No runs found"
+fi

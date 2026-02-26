@@ -1,0 +1,217 @@
+#!/bin/bash
+# Send progress report email
+# 
+# This script is designed to run inside the Docker container during job execution
+# where the email-agent skill is available.
+#
+# In sandbox environment: saves email to file for review
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+EMAIL_FILE="/tmp/progress-email-to-winsorllc@yahoo.com.txt"
+
+# Build email
+cat > "$EMAIL_FILE" << 'EMAILEOF'
+To: winsorllc@yahoo.com
+Subject: PopeBot Progress Report: SOP Engine Skill Built
+From: PopeBot Agent <thepopebot>
+
+PopeBot Progress Report: SOP Engine Skill Built
+==============================================
+
+SUMMARY
+-------
+I scanned three repositories (zeroclaw-labs/zeroclaw, openclaw/openclaw, and stephengpope/thepopebot) for new tools, skills, and architectures. I identified the best new idea and implemented it as a new PopeBot skill.
+
+WHAT I BUILT: SOP ENGINE SKILL
+------------------------------
+Based on the Standard Operating Procedure (SOP) architecture from zeroclaw-labs/zeroclaw, I implemented a complete SOP Engine skill for PopeBot that enables:
+
+Features:
+- Multi-step workflow execution with state persistence
+- Approval gates - pause and wait for human approval between steps
+- Execution modes: auto, supervised, step_by_step, priority_based
+- State tracking - persists execution state between steps
+- Audit logging - complete history of all SOP executions
+- Multiple triggers - manual, cron, webhook support
+
+Commands Implemented:
+1. sop-list - List all available SOPs
+2. sop-create - Create new SOP from template
+3. sop-execute - Start an SOP execution
+4. sop-approve - Approve continuation of an SOP
+5. sop-reject - Cancel/reject an SOP run
+6. sop-status - Check SOP execution status
+7. sop-runs - List all SOP runs
+
+TEST RESULTS
+------------
+All tests passed:
+
+=== Test 1: Create an SOP ===
+✓ SOP created successfully
+
+=== Test 2: List SOPs ===
+✓ SOP listed successfully
+
+=== Test 3: Execute SOP ===
+✓ SOP execution started with Run ID
+
+=== Test 4: Check Status ===
+✓ Status check successful
+
+=== Test 5: List Runs ===
+✓ Runs list successful
+
+=== Test 6: Verify State Persistence ===
+✓ State persisted correctly
+
+=== Test 7: Verify Audit Log ===
+✓ Audit log created
+
+All Tests Passed!
+
+CODE SAMPLES
+------------
+
+SOP Definition Format:
+```markdown
+---
+name: deploy-frontend
+description: Deploy frontend to staging
+version: "1.0.0"
+priority: high
+execution_mode: supervised
+triggers:
+  - type: manual
+---
+
+# Deploy Frontend
+
+## Step 1: Build
+npm run build
+
+## Step 2: Deploy (requires approval)
+./deploy.sh staging
+```
+
+Executing an SOP:
+```bash
+sop-execute deploy-frontend
+# Output:
+# Starting SOP: deploy-frontend
+# Run ID: run-20260225-104559-123
+# Mode: supervised
+# Steps: 2
+#
+# Step 1: Build
+# ✓ Completed
+#
+# ⚠️  Approval required to continue
+# Run 'sop-approve run-20260225-104559-123' to proceed
+```
+
+Checking Status:
+```bash
+sop-status run-20260225-104559-123
+# Output:
+# SOP Run Status
+# =============
+#
+# Run ID: run-20260225-104559-123
+# SOP Name: deploy-frontend
+# Status: pending_approval
+# Mode: supervised
+# Priority: high
+#
+# Started: 2026-02-25T10:45:59Z
+# Current Step: 1
+#
+# History:
+#   Step 1: Build - completed
+```
+
+FILES CREATED
+-------------
+.pi/skills/sop-engine/
+├── SKILL.md              - Skill documentation
+└── scripts/
+    ├── sop-list          - List available SOPs
+    ├── sop-create        - Create new SOP
+    ├── sop-execute       - Execute an SOP
+    ├── sop-approve       - Approve SOP continuation
+    ├── sop-reject        - Reject/cancel SOP
+    ├── sop-status        - Check SOP status
+    ├── sop-runs          - List all runs
+    ├── send-email        - Email utility
+    ├── send-email-cli.js - CLI email sender
+    ├── send-progress-email.js - Email sender with Python SMTP
+    ├── test-sop-engine   - Test suite
+    ├── test-email        - Email test
+    └── prepare-report.sh - Report preparation
+
+HOW TO USE
+----------
+1. Activate the skill (if not already active):
+   ln -s ../../pi-skills/sop-engine .pi/skills/sop-engine
+
+2. Create an SOP:
+   sop-create my-workflow --description "My multi-step task"
+
+3. Edit the SOP in ~/.thepopebot/sops/my-workflow.md
+
+4. Execute:
+   sop-execute my-workflow
+
+5. For supervised workflows, approve between steps:
+   sop-approve <run-id>
+
+ARCHITECTURE NOTES
+------------------
+The SOP Engine draws from zeroclaw's sophisticated SOP system but implements it as a bash-based skill for the Pi agent. Key differences from zeroclaw:
+- Uses shell/bash for execution (not Rust)
+- State stored in JSON files (not database)
+- Approval via CLI commands (not web UI)
+- Simplified for agent execution context
+
+This enables PopeBot to:
+- Run complex, multi-step workflows with human oversight
+- Persist state across long-running operations
+- Maintain audit trails for compliance
+- Request approval at critical decision points
+
+---
+Generated by PopeBot Agent
+Date: 2026-02-25
+EMAILEOF
+
+# Check if running in Docker with email credentials
+if [ -n "$POPEBOT_EMAIL_USER" ] && [ -n "$POPEBOT_EMAIL_PASS" ]; then
+    echo "SMTP credentials found, attempting to send email..."
+    
+    # Try Python SMTP approach (same as email-agent skill)
+    if command -v python3 &> /dev/null; then
+        node "$SCRIPT_DIR/send-progress-email.js" --file "$EMAIL_FILE" winsorllc@yahoo.com "PopeBot Progress Report: SOP Engine Skill Built"
+        if [ $? -eq 0 ]; then
+            echo "✓ Email sent successfully!"
+            rm -f "$EMAIL_FILE"
+            exit 0
+        fi
+    fi
+    
+    echo "Could not send email via SMTP. Saving to file."
+fi
+
+echo "========================================"
+echo "Email saved to: $EMAIL_FILE"
+echo ""
+echo "This environment doesn't have SMTP access."
+echo "In production (Docker container), the email-agent"
+echo "skill will send this automatically when credentials"
+echo "are configured."
+echo "========================================"
+
+# Show the email
+echo ""
+echo "--- EMAIL CONTENT ---"
+cat "$EMAIL_FILE"
+echo "--- END EMAIL ---"

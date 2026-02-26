@@ -1,0 +1,94 @@
+#!/bin/bash
+# Send email via curl using Gmail SMTP
+
+usage() {
+    echo "Usage: send-email <to> <subject> <body>"
+    echo ""
+    echo "Arguments:"
+    echo "  <to>      Destination email"
+    echo "  <subject> Email subject"
+    echo "  <body>    Email body (or use --body-file)"
+    echo ""
+    echo "Options:"
+    echo "  --body-file <file>   Read body from file"
+    exit 1
+}
+
+# Parse arguments
+TO=""
+SUBJECT=""
+BODY=""
+BODY_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --body-file)
+            BODY_FILE="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$TO" ]; then
+                TO="$1"
+            elif [ -z "$SUBJECT" ]; then
+                SUBJECT="$1"
+            elif [ -z "$BODY" ]; then
+                BODY="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$TO" ] || [ -z "$SUBJECT" ]; then
+    usage
+fi
+
+# Get body from file or argument
+if [ -n "$BODY_FILE" ]; then
+    BODY=$(cat "$BODY_FILE")
+elif [ -z "$BODY" ]; then
+    BODY=""
+fi
+
+# Get SMTP credentials from environment
+SMTP_USER="${SMTP_USER:-${POPEBOT_EMAIL_USER}}"
+SMTP_PASS="${SMTP_PASS:-${POPEBOT_EMAIL_PASS}}"
+
+if [ -z "$SMTP_USER" ] || [ -z "$SMTP_PASS" ]; then
+    echo "Error: SMTP credentials not configured"
+    echo "Set SMTP_USER and SMTP_PASS environment variables"
+    exit 1
+fi
+
+# Create temp file for mail content
+TMPFILE=$(mktemp)
+
+# Write email content
+cat > "$TMPFILE" << EOF
+To: $TO
+Subject: $SUBJECT
+From: PopeBot Agent <$SMTP_USER>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+$BODY
+EOF
+
+# Send via Gmail SMTP using curl
+echo "Sending email to $TO..."
+curl --url "smtp://smtp.gmail.com:587" \
+    --mail-from "$SMTP_USER" \
+    --mail-rcpt "$TO" \
+    --user "$SMTP_USER:$SMTP_PASS" \
+    --upload-file "$TMPFILE" 2>&1
+
+RESULT=$?
+rm -f "$TMPFILE"
+
+if [ $RESULT -eq 0 ]; then
+    echo "✓ Email sent successfully to $TO"
+    exit 0
+else
+    echo "✗ Failed to send email (exit code: $RESULT)"
+    exit 1
+fi

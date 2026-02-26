@@ -1,0 +1,51 @@
+#!/bin/bash
+# SOP Approve - Approve an SOP to continue
+
+set -e
+
+STATE_DIR="${STATE_DIR:-$HOME/.thepopebot/sop-state}"
+
+usage() {
+    echo "Usage: sop-approve <run-id>"
+    echo ""
+    echo "Arguments:"
+    echo "  <run-id>   The ID of the SOP run to approve"
+    exit 1
+}
+
+if [ -z "$1" ]; then
+    usage
+fi
+
+RUN_ID="$1"
+STATE_FILE="$STATE_DIR/$RUN_ID.json"
+
+if [ ! -f "$STATE_FILE" ]; then
+    echo "Error: Run '$RUN_ID' not found"
+    exit 1
+fi
+
+# Check current status
+STATUS=$(jq -r '.status' "$STATE_FILE")
+
+if [ "$STATUS" = "completed" ]; then
+    echo "Error: Run already completed"
+    exit 1
+fi
+
+if [ "$STATUS" = "approved" ]; then
+    echo "Run already approved"
+    exit 0
+fi
+
+if [ "$STATUS" = "rejected" ]; then
+    echo "Error: Run was rejected"
+    exit 1
+fi
+
+# Approve the run
+jq '.status = "approved"' "$STATE_FILE" > "$STATE_DIR/$RUN_ID.tmp"
+mv "$STATE_DIR/$RUN_ID.tmp" "$STATE_FILE"
+
+echo "✓ Approved run $RUN_ID"
+echo "SOP will continue execution..."
