@@ -34,7 +34,7 @@ The system runs 3 distinct agents mapped directly to Ollama Cloud models via `CR
 | **Mimi** | `minimax-m2.5` | custom | The Heavy Engineer (Best writer, production-grade) |
 | **Jackie** | `glm-5` | custom | The System Scripter (High volume, OS-level tools) |
 
-*(Note: Gwen `qwen3.5:397b` is shelved due to consistently returning empty responses).*
+*(Note: Gwen `qwen3.5:397b` is shelved due to consistently returning empty responses. Retesting required before re-enabling).*
 
 ---
 
@@ -151,6 +151,20 @@ git fetch origin pull/<pr-number>/head:recovery-<pr-number>
 git checkout recovery-<pr-number> -- .pi/skills/<skill-name>/
 git add .
 git commit -m "Recover <skill-name> from PR #<number>"
+```
+
+### Repairing "Path Too Long" Symlinks
+If a run fails with `File name too long`, it means an agent committed a skill as a path-string symlink. Use this PowerShell logic to repair:
+```powershell
+# Get the raw string content from git (which is the documentation text)
+$content = git show HEAD:.pi/skills/<skill-name>
+# Remove the broken link
+git rm -f .pi/skills/<skill-name>
+# Rebuild as directory
+New-Item -ItemType Directory -Force -Path .pi/skills/<skill-name>
+# Restore content to SKILL.md
+Set-Content -Path .pi/skills/<skill-name>/SKILL.md -Value $content -Encoding UTF8
+git add .pi/skills/<skill-name>/SKILL.md
 ```
 
 ---
