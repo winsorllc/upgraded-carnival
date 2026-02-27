@@ -18,7 +18,7 @@
     "schedule": "*/1 * * * *",
     "type": "command",
     "command": "echo \"pong!\"",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "cleanup-logs",
@@ -89,6 +89,6 @@
     "job": "Your mission is to perform a deep architectural review and overhaul of the following media skills in .pi/skills/: ffmpeg-tools, video-frames, youtube-transcript, transcribe, camsnap, and image-gen. For each skill: 1) Read the existing SKILL.md and implementation code. 2) Rewrite the code to be strictly production-grade (add thorough error handling, progress indicators, edge-case coverage). 3) Update the SKILL.md to be extremely comprehensive (like your standard Architect work). Do NOT stop until all 6 skills are upgraded. Then, send a detailed email to winsorllc@yahoo.com explaining the specific improvements you made to each skill.",
     "llm_provider": "custom",
     "llm_model": "kimi-k2.5",
-    "enabled": true
+    "enabled": false
   }
 ]
