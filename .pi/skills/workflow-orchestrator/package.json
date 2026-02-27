@@ -1,0 +1,26 @@
+{
+  "name": "workflow-orchestrator",
+  "version": "1.0.0",
+  "description": "Declarative workflow orchestration for multi-agent PopeBot tasks",
+  "type": "module",
+  "main": "workflow-executor.js",
+  "bin": {
+    "workflow": "./workflow-executor.js"
+  },
+  "scripts": {
+    "test": "node workflow-executor.js help",
+    "start": "node workflow-executor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "popebot",
+    "workflow",
+    "orchestration",
+    "multi-agent",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,27 @@
+{
+  "name": "popebot-skill-discovery",
+  "version": "1.0.0",
+  "description": "Automatically discover, evaluate, and generate manifests for new PopeBot skills from GitHub. Based on ZeroClaw's SkillForge architecture.",
+  "main": "discover.js",
+  "scripts": {
+    "discover": "node discover.js",
+    "evaluate": "node evaluate.js",
+    "generate": "node generate.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "popebot",
+    "skill",
+    "ai-agent",
+    "automation",
+    "skillforge",
+    "discovery"
+  ],
+  "author": "PopeBot",
+  "license": "MIT",
+  "bin": {
+    "skill-discover": "./discover.js",
+    "skill-evaluate": "./evaluate.js",
+    "skill-generate": "./generate.js"
+  }
+}
